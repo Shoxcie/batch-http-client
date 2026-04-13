@@ -1,4 +1,4 @@
-# shoxcie/http-client
+# shoxcie/batch-http-client
 
 HTTP request batch executor with individual retries, built on [`Symfony HttpClient`](https://github.com/symfony/http-client).
 
@@ -10,7 +10,7 @@ HTTP request batch executor with individual retries, built on [`Symfony HttpClie
 ## Installation
 
 ```bash
-composer require shoxcie/http-client
+composer require shoxcie/batch-http-client
 ```
 
 ## License

@@ -1,5 +1,5 @@
 {
-    "name": "shoxcie/http-client",
+    "name": "shoxcie/batch-http-client",
     "description": "HTTP request batch executor with individual retries, built on Symfony HttpClient.",
     "type": "library",
     "license": "MIT",
@@ -18,12 +18,12 @@
     },
     "autoload": {
         "psr-4": {
-            "Shoxcie\\HttpClient\\": "src/"
+            "Shoxcie\\BatchHttpClient\\": "src/"
         }
     },
     "autoload-dev": {
         "psr-4": {
-            "Shoxcie\\HttpClient\\Tests\\": "tests/"
+            "Shoxcie\\BatchHttpClient\\Tests\\": "tests/"
         }
     },
     "scripts": {

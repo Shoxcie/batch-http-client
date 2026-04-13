@@ -4,7 +4,29 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-`shoxcie/http-client` — a PHP library wrapping Symfony HttpClient. Namespace: `Shoxcie\HttpClient`.
+`shoxcie/batch-http-client` — HTTP request batch executor with individual retries, built on Symfony HttpClient. Namespace: `Shoxcie\BatchHttpClient`.
+
+## Design
+
+A single function that executes HTTP requests in parallel. Each request retries independently without blocking others.
+
+### Input
+
+- **Requests array** — each element contains:
+  - Standard Symfony HttpClient params: method, URL, options
+  - **Is required** (bool) — if a required request exhausts all retries, throw and cancel all other in-flight requests immediately
+  - **Retries count** (int) — max retry count for this request
+  - **Decode JSON** (bool) — `true`: call `toArray()`, `false`: call `getContent()` (raw body)
+  - **Retry delay** (int, ms) — base delay for exponential backoff: `retryDelay * 2^attempt` (default 0ms)
+- **Logger callback** — receives on each error (or all requests if verbose flag is set):
+  - URL, HTTP status, request duration, Symfony exception, response headers, response body
+- **Log all flag** (bool, default false) — when true, logger is called for successful requests too
+
+### Output
+
+- Array of results matching input order
+- Failed optional requests return `null`
+- If a required request fails after all retries → exception, all remaining requests cancelled
 
 ## Commands
 
