@@ -45,7 +45,7 @@ Fires all HTTP requests immediately (Symfony HttpClient is async by default). St
 
 ### `fetch(logger, logAll)` — wait for responses, handle retries, return results
 
-- `logger` (callable, optional) — called on each error (or all requests if `logAll` is true), receives: URL, HTTP status, request duration, Symfony exception, response headers, response body
+- `logger` (callable, optional) — called on each error (or all requests if `logAll` is true), receives: `string $url, int $statusCode, float $duration, ?Throwable $exception, array $headers, string $body`
 - `logAll` (bool, default `false`) — when true, logger is called for successful requests too
 - Resets internal state after collecting results (object is reusable)
 
@@ -61,7 +61,7 @@ Fires all HTTP requests immediately (Symfony HttpClient is async by default). St
 
 - Array of results matching input order
 - Failed optional requests return `null`
-- If a required request fails after all retries → rethrow the last caught Symfony exception, cancel all remaining requests
+- If `throwOnError` request fails after all retries → rethrow the last caught Symfony exception (`HttpExceptionInterface` for non-2xx, `TransportExceptionInterface` for transport errors), cancel all remaining requests
 
 ## Commands
 
