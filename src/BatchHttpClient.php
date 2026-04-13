@@ -10,16 +10,23 @@ use Symfony\Contracts\HttpClient\HttpClientInterface;
 /**
  * @todo Replace this placeholder with the actual implementation.
  */
-final class BatchHttpClient
+final readonly class BatchHttpClient
 {
+    private HttpClientInterface $httpClient;
+
     public function __construct(
-        private ?HttpClientInterface $httpClient = null,
+        ?HttpClientInterface $httpClient = null,
     ) {
-        $this->httpClient ??= HttpClient::create();
+        $this->httpClient = $httpClient ?? HttpClient::create();
     }
 
-    public function request(): int
+    /**
+     * @return array<mixed>
+     */
+    public function request(string $url): array
     {
-        return 0;
+        $response = $this->httpClient->request('GET', $url);
+
+        return $response->toArray();
     }
 }

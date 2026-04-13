@@ -37,6 +37,7 @@
         "rector:check": "rector process --dry-run",
         "quality": [
             "@analyse",
+            "@rector:check",
             "@cs:check",
             "@test"
         ]
