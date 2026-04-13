@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Shoxcie\BatchHttpClient;
 
-use SplObjectStorage;
 use Symfony\Component\HttpClient\HttpClient;
 use Symfony\Contracts\HttpClient\Exception\HttpExceptionInterface;
 use Symfony\Contracts\HttpClient\Exception\TransportExceptionInterface;
@@ -45,7 +44,7 @@ final class BatchHttpClient
             $this->responses[$key] = $this->httpClient->request(
                 $config->method,
                 $config->url,
-                $config->options,
+                ['user_data' => $key] + $config->options,
             );
         }
 
@@ -70,15 +69,11 @@ final class BatchHttpClient
                 continue;
             }
 
-            $responseToKey = $this->buildResponseKeyMap();
-            $poolChanged = false;
-
             try {
                 foreach ($this->httpClient->stream($this->responses) as $response => $chunk) {
                     if ($chunk->getError() !== null) {
-                        $key = $responseToKey[$response];
+                        $key = $this->resolveKey($response);
                         $this->handleTransportError($key, $response, $results, $logger);
-                        $poolChanged = true;
 
                         break;
                     }
@@ -87,7 +82,7 @@ final class BatchHttpClient
                         continue;
                     }
 
-                    $key = $responseToKey[$response];
+                    $key = $this->resolveKey($response);
                     $config = $this->configs[$key];
                     $statusCode = $response->getStatusCode();
 
@@ -101,19 +96,17 @@ final class BatchHttpClient
                         }
 
                         unset($this->responses[$key]);
-                        $poolChanged = true;
 
                         break;
                     }
 
                     $this->handleFailedResponse($key, $config, $response, $statusCode, $results, $logger);
-                    $poolChanged = true;
 
                     break;
                 }
             } catch (HttpExceptionInterface $e) {
                 $failedResponse = $e->getResponse();
-                $key = $responseToKey[$failedResponse];
+                $key = $this->resolveKey($failedResponse);
                 $config = $this->configs[$key];
                 $statusCode = $failedResponse->getStatusCode();
 
@@ -158,26 +151,19 @@ final class BatchHttpClient
             $this->responses[$key] = $this->httpClient->request(
                 $config->method,
                 $config->url,
-                $options,
+                ['user_data' => $key] + $options,
             );
 
             unset($this->retryAt[$key]);
         }
     }
 
-    /**
-     * @return SplObjectStorage<ResponseInterface, string>
-     */
-    private function buildResponseKeyMap(): SplObjectStorage
+    private function resolveKey(ResponseInterface $response): string
     {
-        /** @var SplObjectStorage<ResponseInterface, string> $map */
-        $map = new SplObjectStorage();
+        $key = $response->getInfo('user_data');
+        \assert(\is_string($key));
 
-        foreach ($this->responses as $key => $response) {
-            $map[$response] = $key;
-        }
-
-        return $map;
+        return $key;
     }
 
     /**
