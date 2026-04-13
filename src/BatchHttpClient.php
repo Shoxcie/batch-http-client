@@ -6,13 +6,15 @@ namespace Shoxcie\BatchHttpClient;
 
 use Symfony\Component\HttpClient\HttpClient;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
+use Symfony\Contracts\HttpClient\ResponseInterface;
 
 /**
  * @todo Replace this placeholder with the actual implementation.
  */
-final readonly class BatchHttpClient
+final class BatchHttpClient
 {
-    private HttpClientInterface $httpClient;
+    private readonly HttpClientInterface $httpClient;
+    private ?ResponseInterface $response = null;
 
     public function __construct(
         ?HttpClientInterface $httpClient = null,
@@ -20,13 +22,18 @@ final readonly class BatchHttpClient
         $this->httpClient = $httpClient ?? HttpClient::create();
     }
 
-    /**
-     * @return array<mixed>
-     */
-    public function request(string $url): array
+    public function request(string $url): static
     {
-        $response = $this->httpClient->request('GET', $url);
+        $this->response = $this->httpClient->request('GET', $url);
 
-        return $response->toArray();
+        return $this;
+    }
+
+    /**
+     * @return array<mixed>|null
+     */
+    public function fetch(): ?array
+    {
+        return $this->response?->toArray();
     }
 }

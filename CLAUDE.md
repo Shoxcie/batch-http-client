@@ -8,16 +8,29 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Design
 
-A single function that executes HTTP requests in parallel. Each request retries independently without blocking others.
+Two-phase batch HTTP executor. Requests fire in parallel, each retries independently without blocking others. Split into `request()` and `fetch()` so the caller can do other work while requests are in flight.
 
-### Input
+### API
+
+```php
+$batch = $client->request([...]);
+// do other work while requests are in flight
+$results = $client->fetch($batch);
+```
+
+### `request(requests)` — fire all requests, return immediately
 
 - **Requests array** — each element contains:
   - Standard Symfony HttpClient params: method, URL, options
-  - **Is required** (bool) — if a required request exhausts all retries, throw and cancel all other in-flight requests immediately
-  - **Retries count** (int) — max retry count for this request
-  - **Decode JSON** (bool) — `true`: call `toArray()`, `false`: call `getContent()` (raw body)
-  - **Retry delay** (int, ms) — base delay for exponential backoff: `retryDelay * 2^attempt` (default 0ms)
+  - `required` (bool) — if a required request exhausts all retries, throw and cancel all other in-flight requests immediately
+  - `retries` (int) — max retry count for this request
+  - `decodeJson` (bool) — `true`: call `toArray()`, `false`: call `getContent()` (raw body)
+  - `retryDelay` (int, ms) — base delay for exponential backoff: `retryDelay * 2^attempt` (default 0ms)
+  - `retryOptions` (array) — Symfony HttpClient options merged onto the original options for retry attempts via `array_replace_recursive($options, $retryOptions)`. Use to override timeout, max_duration, headers, etc. on retries.
+- Returns a batch handle object holding Symfony response objects and per-request config
+
+### `fetch(batch)` — wait for responses, handle retries, return results
+
 - **Logger callback** — receives on each error (or all requests if verbose flag is set):
   - URL, HTTP status, request duration, Symfony exception, response headers, response body
 - **Log all flag** (bool, default false) — when true, logger is called for successful requests too
