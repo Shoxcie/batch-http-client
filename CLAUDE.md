@@ -28,15 +28,15 @@ $results = $client->fetch(logger: function (RequestError $e) { ... });
 ### Classes
 
 - `BatchHttpClient` — stateful, has `request()` and `fetch()`. Accepts optional `HttpClientInterface` in constructor (defaults to `HttpClient::create()`).
-- `RequestConfig` — DTO for per-request params (separate file). Constructor with defaults:
+- `RequestConfig` — readonly DTO for per-request params (separate file). Constructor with defaults:
   - `method` (string)
   - `url` (string)
   - `options` (array, default `[]`) — standard Symfony HttpClient options (timeout, max_duration, headers, etc.)
-  - `required` (bool, default `false`) — if true and request exhausts all retries, throw and cancel all in-flight requests
-  - `retries` (int, default `0`) — max retry count
-  - `decodeJson` (bool, default `true`) — `true`: `toArray()`, `false`: `getContent()`
-  - `retryDelay` (int, ms, default `0`) — base delay for exponential backoff: `retryDelay * 2^attempt`
   - `retryOptions` (array, default `[]`) — merged onto options for retries via `array_replace_recursive($options, $retryOptions)`
+  - `throwOnError` (bool, default `true`) — if true and request exhausts all retries, rethrow last exception and cancel all in-flight requests
+  - `decodeJson` (bool, default `true`) — `true`: `toArray()`, `false`: `getContent()`
+  - `maxRetries` (int, default `0`) — max retry count
+  - `initialRetryDelayMs` (int, ms, default `0`) — base delay for exponential backoff: `initialRetryDelayMs * 2^attempt`
   - `retryOnTransportException` (bool, default `true`) — whether to retry on Symfony transport exceptions (connection timeouts, DNS failures, etc.)
 
 ### `request(array<RequestConfig>)` — fire all requests, return `static`
@@ -53,7 +53,7 @@ Fires all HTTP requests immediately (Symfony HttpClient is async by default). St
 
 - Any non-2xx HTTP status triggers a retry (hardcoded)
 - Transport exceptions (connection timeout, DNS failure) retry based on `retryOnTransportException` per request (configurable, default true)
-- Retries use exponential backoff: `retryDelay * 2^attempt`
+- Retries use exponential backoff: `initialRetryDelayMs * 2^attempt`
 - Retry requests use `array_replace_recursive($options, $retryOptions)` for options
 - Each request retries independently without blocking others
 

@@ -12,7 +12,7 @@ final class BatchHttpClient
 {
     private readonly HttpClientInterface $httpClient;
 
-    /** @var array<ResponseInterface> */
+    /** @var array<string, ResponseInterface> */
     private array $responses = [];
 
     public function __construct(
@@ -21,9 +21,20 @@ final class BatchHttpClient
         $this->httpClient = $httpClient ?? HttpClient::create();
     }
 
+    /**
+     * @param array<string, RequestConfig> $requestsParams
+     */
     public function request(array $requestsParams): static
     {
         // start all requests but don't wait yet
+
+        foreach ($requestsParams as $key => $params) {
+            $this->responses[$key] = $this->httpClient->request(
+                $params->method,
+                $params->url,
+                $params->options,
+            );
+        }
 
         return $this;
     }
@@ -31,8 +42,17 @@ final class BatchHttpClient
     /**
      * @return array<string, mixed>
      */
-    public function fetch(callable $logger, bool $logOnSuccess = false): array
+    public function fetch(?callable $logger = null, bool $logOnSuccess = false): array
     {
         // wait and return all the responses
+
+        $result = [];
+        foreach ($this->responses as $key => $response) {
+            $result[$key] = $response->toArray();
+        }
+
+        $this->responses = [];
+
+        return $result;
     }
 }
