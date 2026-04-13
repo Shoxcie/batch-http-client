@@ -8,13 +8,12 @@ use Symfony\Component\HttpClient\HttpClient;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
 use Symfony\Contracts\HttpClient\ResponseInterface;
 
-/**
- * @todo Replace this placeholder with the actual implementation.
- */
 final class BatchHttpClient
 {
     private readonly HttpClientInterface $httpClient;
-    private ?ResponseInterface $response = null;
+
+    /** @var array<ResponseInterface> */
+    private array $responses = [];
 
     public function __construct(
         ?HttpClientInterface $httpClient = null,
@@ -22,18 +21,18 @@ final class BatchHttpClient
         $this->httpClient = $httpClient ?? HttpClient::create();
     }
 
-    public function request(string $url): static
+    public function request(array $requestsParams): static
     {
-        $this->response = $this->httpClient->request('GET', $url);
+        // start all requests but don't wait yet
 
         return $this;
     }
 
     /**
-     * @return array<mixed>|null
+     * @return array<string, mixed>
      */
-    public function fetch(): ?array
+    public function fetch(callable $logger, bool $logOnSuccess = false): array
     {
-        return $this->response?->toArray();
+        // wait and return all the responses
     }
 }
