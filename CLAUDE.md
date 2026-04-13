@@ -84,3 +84,20 @@ composer quality             # Run analyse + cs:check + test in sequence
 - PER Coding Style 2.0 with risky rules, strict comparisons (`===`), alphabetical imports
 - PHPStan level 10 with strict rules and bleeding edge — no baseline, fix all errors
 - When adding dependencies, use `composer require package/name` without version constraints — let Composer resolve versions
+
+## TODO: Tests
+
+Write comprehensive unit tests using `MockHttpClient` / `MockResponse` / `JsonMockResponse`:
+
+- [ ] Successful batch requests (2xx) — verify results array matches input keys
+- [ ] Mixed success/failure results — some 2xx, some errors
+- [ ] Retry behavior — verify retry count, exponential backoff timing
+- [ ] `throwOnError: true` — exception thrown after retries exhausted, all in-flight cancelled
+- [ ] `throwOnError: false` — failed requests return `null`
+- [ ] Transport exception handling — DNS failure, connection timeout
+- [ ] `retryOnTransportException: true` vs `false`
+- [ ] Logger callback — verify it receives correct arguments (url, statusCode, duration, exception, headers, body)
+- [ ] `logOnSuccess: true` — logger called for 2xx responses
+- [ ] `decodeJson: true` vs `false` — `toArray()` vs `getContent()`
+- [ ] `retryOptions` merging — verify `array_replace_recursive` behavior on retries
+- [ ] Reusability — `fetch()` resets state, object can be used again
