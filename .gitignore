@@ -1,0 +1,29 @@
+# Dependencies
+/vendor/
+
+# Composer lock (library best practice — consumers use their own)
+composer.lock
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# PHP-CS-Fixer
+.php-cs-fixer.cache
+
+# PHPStan
+.phpstan-cache/
+phpstan.neon
+
+# PHPUnit / Pest
+.phpunit.cache/
+
+# Coverage
+coverage/
+
+# Rector
+.rector-cache/

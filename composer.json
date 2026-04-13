@@ -1,0 +1,53 @@
+{
+    "name": "shoxcie/http-client",
+    "description": "HTTP request batch executor with individual retries, built on Symfony HttpClient.",
+    "type": "library",
+    "license": "MIT",
+    "require": {
+        "php": "^8.4 || ^8.5",
+        "symfony/http-client": "^8.0"
+    },
+    "require-dev": {
+        "friendsofphp/php-cs-fixer": "^3.95",
+        "pestphp/pest": "^4.5",
+        "pestphp/pest-plugin-type-coverage": "^4.0",
+        "phpstan/extension-installer": "^1.4",
+        "phpstan/phpstan": "^2.1",
+        "phpstan/phpstan-strict-rules": "^2.0",
+        "rector/rector": "^2.4"
+    },
+    "autoload": {
+        "psr-4": {
+            "Shoxcie\\HttpClient\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Shoxcie\\HttpClient\\Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "test": "pest --color=always",
+        "test:coverage": "pest --coverage --min=80",
+        "test:type-coverage": "pest --type-coverage --min=100",
+        "analyse": "phpstan analyse",
+        "cs:check": "php-cs-fixer fix --dry-run --diff",
+        "cs:fix": "php-cs-fixer fix",
+        "rector": "rector process",
+        "rector:check": "rector process --dry-run",
+        "quality": [
+            "@analyse",
+            "@cs:check",
+            "@test"
+        ]
+    },
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {
+            "pestphp/pest-plugin": true,
+            "phpstan/extension-installer": true
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}

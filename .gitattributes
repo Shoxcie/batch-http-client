@@ -1,0 +1,14 @@
+# Normalize line endings
+* text=auto eol=lf
+
+# Export ignore (excluded from Composer dist downloads)
+/.github                    export-ignore
+/tests                      export-ignore
+/.editorconfig              export-ignore
+/.gitattributes             export-ignore
+/.gitignore                 export-ignore
+/.php-cs-fixer.dist.php     export-ignore
+/phpstan.dist.neon          export-ignore
+/phpunit.xml.dist           export-ignore
+/rector.php                 export-ignore
+/CHANGELOG.md               export-ignore
