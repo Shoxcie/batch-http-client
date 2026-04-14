@@ -111,12 +111,14 @@ final class BatchHttpClient
                         }
                     }
 
-                    break;
                 } catch (TransportExceptionInterface $e) {
+                    $response->cancel();
                     $key = $this->resolveKey($response);
                     unset($failedStatuses[$key]);
                     $this->handleTransportError($key, $response, $e, $results, $logger);
+                }
 
+                if ($this->retryAt !== []) {
                     break;
                 }
             }
