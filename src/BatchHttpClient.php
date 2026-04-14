@@ -60,6 +60,9 @@ final class BatchHttpClient
     {
         $results = [];
 
+        /** @var array<string, int> */
+        $failedStatuses = [];
+
         while ($this->responses !== [] || $this->retryAt !== []) {
             $this->fireReadyRetries();
 
@@ -69,13 +72,21 @@ final class BatchHttpClient
                 continue;
             }
 
-            try {
-                foreach ($this->httpClient->stream($this->responses) as $response => $chunk) {
-                    if ($chunk->getError() !== null) {
-                        $key = $this->resolveKey($response);
-                        $this->handleTransportError($key, $response, $results, $logger);
+            foreach ($this->httpClient->stream($this->responses) as $response => $chunk) {
+                try {
+                    if ($chunk->isTimeout()) {
+                        continue;
+                    }
 
-                        break;
+                    if ($chunk->isFirst()) {
+                        $key = $this->resolveKey($response);
+                        $statusCode = $response->getStatusCode();
+
+                        if ($statusCode < 200 || $statusCode >= 300) {
+                            $failedStatuses[$key] = $statusCode;
+                        }
+
+                        continue;
                     }
 
                     if (!$chunk->isLast()) {
@@ -84,50 +95,30 @@ final class BatchHttpClient
 
                     $key = $this->resolveKey($response);
                     $config = $this->configs[$key];
-                    $statusCode = $response->getStatusCode();
+                    unset($this->responses[$key]);
 
-                    if ($statusCode >= 200 && $statusCode < 300) {
+                    if (isset($failedStatuses[$key])) {
+                        $statusCode = $failedStatuses[$key];
+                        unset($failedStatuses[$key]);
+                        $this->handleFailedResponse($key, $config, $response, $statusCode, $results, $logger);
+                    } else {
                         $results[$key] = $config->decodeJson
                             ? $response->toArray(false)
                             : $response->getContent(false);
 
                         if ($logOnSuccess && $logger !== null) {
-                            $this->callLogger($logger, $response, $statusCode, null);
+                            $this->callLogger($logger, $response, $response->getStatusCode(), null);
                         }
-
-                        unset($this->responses[$key]);
-
-                        break;
                     }
 
-                    $this->handleFailedResponse($key, $config, $response, $statusCode, $results, $logger);
+                    break;
+                } catch (TransportExceptionInterface $e) {
+                    $key = $this->resolveKey($response);
+                    unset($failedStatuses[$key]);
+                    $this->handleTransportError($key, $response, $e, $results, $logger);
 
                     break;
                 }
-            } catch (HttpExceptionInterface $e) {
-                $failedResponse = $e->getResponse();
-                $key = $this->resolveKey($failedResponse);
-                $config = $this->configs[$key];
-                $statusCode = $failedResponse->getStatusCode();
-
-                if ($logger !== null) {
-                    $this->callLogger($logger, $failedResponse, $statusCode, $e);
-                }
-
-                unset($this->responses[$key]);
-
-                if ($this->attempts[$key] < $config->maxRetries) {
-                    $this->scheduleRetry($key, $config);
-                } elseif ($config->throwOnError) {
-                    $this->cancelAll();
-                    $this->reset();
-
-                    throw $e;
-                } else {
-                    $results[$key] = null;
-                }
-            } catch (TransportExceptionInterface $e) {
-                $this->handleStreamTransportException($e, $results, $logger);
             }
         }
 
@@ -172,35 +163,32 @@ final class BatchHttpClient
     private function handleTransportError(
         string $key,
         ResponseInterface $response,
+        TransportExceptionInterface $e,
         array &$results,
         ?callable $logger,
     ): void {
         $config = $this->configs[$key];
 
-        try {
-            $response->getHeaders(true);
-        } catch (TransportExceptionInterface $e) {
-            if ($logger !== null) {
-                $this->callLogger($logger, $response, 0, $e);
-            }
-
-            unset($this->responses[$key]);
-
-            if ($config->retryOnTransportException && $this->attempts[$key] < $config->maxRetries) {
-                $this->scheduleRetry($key, $config);
-
-                return;
-            }
-
-            if ($config->throwOnError) {
-                $this->cancelAll();
-                $this->reset();
-
-                throw $e;
-            }
-
-            $results[$key] = null;
+        if ($logger !== null) {
+            $this->callLogger($logger, $response, 0, $e);
         }
+
+        unset($this->responses[$key]);
+
+        if ($config->retryOnTransportException && $this->attempts[$key] < $config->maxRetries) {
+            $this->scheduleRetry($key, $config);
+
+            return;
+        }
+
+        if ($config->throwOnError) {
+            $this->cancelAll();
+            $this->reset();
+
+            throw $e;
+        }
+
+        $results[$key] = null;
     }
 
     /**
@@ -220,8 +208,6 @@ final class BatchHttpClient
             $this->callLogger($logger, $response, $statusCode, $httpException);
         }
 
-        unset($this->responses[$key]);
-
         if ($this->attempts[$key] < $config->maxRetries) {
             $this->scheduleRetry($key, $config);
 
@@ -238,48 +224,6 @@ final class BatchHttpClient
         }
 
         $results[$key] = null;
-    }
-
-    /**
-     * @param array<string, mixed> $results
-     */
-    private function handleStreamTransportException(
-        TransportExceptionInterface $e,
-        array &$results,
-        ?callable $logger,
-    ): void {
-        foreach ($this->responses as $key => $response) {
-            $error = $response->getInfo('error');
-
-            if (!\is_string($error) || $error === '') {
-                continue;
-            }
-
-            $config = $this->configs[$key];
-
-            if ($logger !== null) {
-                $this->callLogger($logger, $response, 0, $e);
-            }
-
-            unset($this->responses[$key]);
-
-            if ($config->retryOnTransportException && $this->attempts[$key] < $config->maxRetries) {
-                $this->scheduleRetry($key, $config);
-
-                return;
-            }
-
-            if ($config->throwOnError) {
-                $this->cancelAll();
-                $this->reset();
-
-                throw $e;
-            }
-
-            $results[$key] = null;
-
-            return;
-        }
     }
 
     private function captureHttpException(ResponseInterface $response): ?HttpExceptionInterface
