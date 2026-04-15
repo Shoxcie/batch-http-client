@@ -8,60 +8,71 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Design
 
-Two-phase batch HTTP executor. Requests fire in parallel, each retries independently without blocking others. Split into `request()` and `fetch()` so the caller can do other work while requests are in flight. `BatchHttpClient` is stateful but reusable — `fetch()` resets internal state after collecting results.
+Two-phase batch HTTP executor. Requests fire in parallel, each retries independently without blocking others. Split into `request()` and `fetch()` so the caller can do other work while requests are in flight. Uses Symfony's `stream()` API with `isFirst` / `isLast` / `isTimeout` chunk pattern for non-blocking parallel processing.
 
 ### API
 
 ```php
 $client = new BatchHttpClient();
 
-$client->request([
-    new RequestConfig('GET', 'https://api.example.com/users', required: true, retries: 3),
-    new RequestConfig('POST', 'https://api.example.com/orders', options: ['json' => $data]),
-]);
-
-// do other work while requests are in flight
-
-$results = $client->fetch(logger: function (RequestError $e) { ... });
+$results = $client
+    ->request([
+        'users'  => new RequestConfig('GET', 'https://api.example.com/users', maxRetries: 3),
+        'orders' => new RequestConfig('POST', 'https://api.example.com/orders', options: ['json' => $data]),
+    ])
+    ->onSuccess(function (string $key, ResponseInterface $response) { ... })
+    ->onRetry(function (string $key, int $attempt, ResponseInterface $failedResponse, ExceptionInterface $e, ResponseInterface $retryResponse) { ... })
+    ->onFailure(function (string $key, ResponseInterface $response, Throwable $e) { ... })
+    ->fetch();
 ```
 
 ### Classes
 
-- `BatchHttpClient` — stateful, has `request()` and `fetch()`. Accepts optional `HttpClientInterface` in constructor (defaults to `HttpClient::create()`).
-- `RequestConfig` — readonly DTO for per-request params (separate file). Constructor with defaults:
+- `BatchHttpClient` — stateful, has `request()`, `onSuccess()`, `onRetry()`, `onFailure()`, and `fetch()`. Accepts optional `HttpClientInterface` in constructor (defaults to `HttpClient::create()`).
+- `RequestConfig` — readonly DTO for per-request params. Constructor with defaults:
   - `method` (string)
   - `url` (string)
   - `options` (array, default `[]`) — standard Symfony HttpClient options (timeout, max_duration, headers, etc.)
-  - `retryOptions` (array, default `[]`) — merged onto options for retries via `array_replace_recursive($options, $retryOptions)`
+  - `retryOptions` (array|Closure, default `[]`) — merged onto options for retries via `array_replace_recursive($options, $retryOptions)`. If Closure: receives `(int $attempt, Throwable $e)`, must return options array.
   - `throwOnError` (bool, default `true`) — if true and request exhausts all retries, rethrow last exception and cancel all in-flight requests
   - `decodeJson` (bool, default `true`) — `true`: `toArray()`, `false`: `getContent()`
   - `maxRetries` (int, default `0`) — max retry count
-  - `initialRetryDelayMs` (int, ms, default `0`) — base delay for exponential backoff: `initialRetryDelayMs * 2^attempt`
   - `retryOnTransportException` (bool, default `true`) — whether to retry on Symfony transport exceptions (connection timeouts, DNS failures, etc.)
 
-### `request(array<RequestConfig>)` — fire all requests, return `static`
+### `request(array<string, RequestConfig>)` — fire all requests, return `static`
 
-Fires all HTTP requests immediately (Symfony HttpClient is async by default). Stores responses and config internally. Returns `$this` for fluent usage.
+Fires all HTTP requests immediately (Symfony HttpClient is async by default). Stores responses and config internally. Returns `$this` for fluent usage. Preserves caller's `user_data` by wrapping as `[$internalKey, $originalUserData]`.
 
-### `fetch(logger, logAll)` — wait for responses, handle retries, return results
+### `fetch()` — wait for responses, handle retries, return results
 
-- `logger` (callable, optional) — called on each error (or all requests if `logAll` is true), receives: `string $url, int $statusCode, float $duration, ?Throwable $exception, array $headers, string $body`
-- `logAll` (bool, default `false`) — when true, logger is called for successful requests too
-- Resets internal state after collecting results (object is reusable)
+- Uses `stream()` with `isFirst` / `isLast` chunk pattern (Symfony docs recommended approach)
+- `isFirst`: acknowledges status code via `$response->getStatusCode()` to prevent generator auto-throw
+- `isLast`: reads response body, stores result
+- Non-2xx and transport errors caught via `catch (TransportExceptionInterface | HttpExceptionInterface)`
+- Outer `try/catch (Throwable)` as safety net — cancels all, calls `onFailure`, rethrows
+- Breaks out of `stream()` foreach only when a retry is scheduled (to restart stream with updated pool)
+
+### Callbacks
+
+- `onSuccess(Closure)` — called for each 2xx response: `(string $key, ResponseInterface $response)`
+- `onRetry(Closure)` — called when a retry fires: `(string $key, int $attempt, ResponseInterface $failedResponse, ExceptionInterface $e, ResponseInterface $retryResponse)`
+- `onFailure(Closure)` — called when a request fails permanently: `(string $key, ResponseInterface $response, Throwable $e)`
 
 ### Retry behavior
 
-- Any non-2xx HTTP status triggers a retry (hardcoded)
+- Any non-2xx HTTP status triggers a retry (Symfony throws `HttpExceptionInterface` which is caught)
 - Transport exceptions (connection timeout, DNS failure) retry based on `retryOnTransportException` per request (configurable, default true)
-- Retries use exponential backoff: `initialRetryDelayMs * 2^attempt`
+- Retries fire immediately (no backoff delay)
 - Retry requests use `array_replace_recursive($options, $retryOptions)` for options
+- `retryOptions` can be a Closure receiving `(int $attempt, Throwable $e)` for dynamic retry configuration
 - Each request retries independently without blocking others
+- `$response->cancel()` called on transport errors before retry to free the broken socket
 
 ### Output
 
-- Array of results matching input order
-- Failed optional requests return `null`
-- If `throwOnError` request fails after all retries → rethrow the last caught Symfony exception (`HttpExceptionInterface` for non-2xx, `TransportExceptionInterface` for transport errors), cancel all remaining requests
+- `array<string, mixed>` of results keyed by request key
+- Failed optional requests (`throwOnError: false`) return `null`
+- If `throwOnError` request fails after all retries → rethrow the last caught Symfony exception, cancel all remaining requests
 
 ## Commands
 
@@ -91,13 +102,13 @@ Write comprehensive unit tests using `MockHttpClient` / `MockResponse` / `JsonMo
 
 - [ ] Successful batch requests (2xx) — verify results array matches input keys
 - [ ] Mixed success/failure results — some 2xx, some errors
-- [ ] Retry behavior — verify retry count, exponential backoff timing
+- [ ] Retry behavior — verify retry count
 - [ ] `throwOnError: true` — exception thrown after retries exhausted, all in-flight cancelled
 - [ ] `throwOnError: false` — failed requests return `null`
 - [ ] Transport exception handling — DNS failure, connection timeout
 - [ ] `retryOnTransportException: true` vs `false`
-- [ ] Logger callback — verify it receives correct arguments (url, statusCode, duration, exception, headers, body)
-- [ ] `logOnSuccess: true` — logger called for 2xx responses
+- [ ] `onSuccess` / `onRetry` / `onFailure` callbacks — verify they receive correct arguments
 - [ ] `decodeJson: true` vs `false` — `toArray()` vs `getContent()`
 - [ ] `retryOptions` merging — verify `array_replace_recursive` behavior on retries
-- [ ] Reusability — `fetch()` resets state, object can be used again
+- [ ] `retryOptions` as Closure — verify dynamic retry options based on attempt/exception
+- [ ] `user_data` preservation — caller's original user_data accessible after batch processing

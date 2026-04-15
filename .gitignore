@@ -27,6 +27,3 @@ coverage/
 
 # Rector
 .rector-cache/
-
-# A scratch script
-/test.php

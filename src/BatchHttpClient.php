@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Shoxcie\BatchHttpClient;
 
+use Closure;
 use Symfony\Component\HttpClient\HttpClient;
+use Symfony\Contracts\HttpClient\Exception\ExceptionInterface;
 use Symfony\Contracts\HttpClient\Exception\HttpExceptionInterface;
 use Symfony\Contracts\HttpClient\Exception\TransportExceptionInterface;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
@@ -15,17 +17,26 @@ final class BatchHttpClient
 {
     private readonly HttpClientInterface $httpClient;
 
-    /** @var array<string, ResponseInterface> */
-    private array $responses = [];
-
     /** @var array<string, RequestConfig> */
     private array $configs = [];
 
-    /** @var array<string, int> */
-    private array $attempts = [];
+    /** @var array<string, ResponseInterface> */
+    private array $responses = [];
 
-    /** @var array<string, float> */
-    private array $retryAt = [];
+    /** @var array<string, int> */
+    private array $retriesCount = [];
+
+    /** @var array<string, mixed> */
+    private array $results = [];
+
+    /** @var null|Closure(string, ResponseInterface): void */
+    private ?Closure $onSuccess = null;
+
+    /** @var null|Closure(string, int, ResponseInterface, ExceptionInterface, ResponseInterface): void */
+    private ?Closure $onRetry = null;
+
+    /** @var null|Closure(string, ResponseInterface, Throwable): void */
+    private ?Closure $onFailure = null;
 
     public function __construct(
         ?HttpClientInterface $httpClient = null,
@@ -34,242 +45,179 @@ final class BatchHttpClient
     }
 
     /**
-     * @param array<string, RequestConfig> $requests
+     * @param array<string, RequestConfig> $configs
      */
-    public function request(array $requests): static
+    public function request(array $configs): static
     {
-        foreach ($requests as $key => $config) {
-            $this->configs[$key] = $config;
-            $this->attempts[$key] = 0;
+        if ($this->responses !== []) {
+            return $this;
+        }
+
+        $this->configs = $configs;
+
+        foreach ($configs as $key => $config) {
+            $this->retriesCount[$key] = 0;
+
+            $userData = $config->options['user_data'] ?? null;
+
+            $options = ['user_data' => [$key, $userData]] + $config->options;
+
             $this->responses[$key] = $this->httpClient->request(
-                $config->method,
-                $config->url,
-                ['user_data' => $key] + $config->options,
+                method: $config->method,
+                url: $config->url,
+                options: $options,
             );
         }
 
         return $this;
     }
 
+    /** @param Closure(string, ResponseInterface): void $closure */
+    public function onSuccess(Closure $closure): static
+    {
+        $this->onSuccess = $closure;
+
+        return $this;
+    }
+
+    /** @param Closure(string, int, ResponseInterface, ExceptionInterface, ResponseInterface): void $closure */
+    public function onRetry(Closure $closure): static
+    {
+        $this->onRetry = $closure;
+
+        return $this;
+    }
+
+    /** @param Closure(string, ResponseInterface, Throwable): void $closure */
+    public function onFailure(Closure $closure): static
+    {
+        $this->onFailure = $closure;
+
+        return $this;
+    }
+
     /**
-     * @param null|callable(string $url, int $statusCode, float $duration, ?Throwable $exception, array<string, list<string>> $headers, string $body): void $logger
-     *
      * @return array<string, mixed>
      */
-    public function fetch(?callable $logger = null, bool $logOnSuccess = false): array
+    public function fetch(): array
     {
-        $results = [];
+        $this->results = [];
 
-        /** @var array<string, int> */
-        $failedStatuses = [];
+        try {
+            while ($this->responses !== []) {
+                /** @var ResponseInterface $response */
+                foreach ($this->httpClient->stream($this->responses) as $response => $chunk) {
+                    try {
+                        if ($chunk->isFirst()) {
+                            $response->getStatusCode();
 
-        while ($this->responses !== [] || $this->retryAt !== []) {
-            $this->fireReadyRetries();
+                        } elseif ($chunk->isLast()) {
+                            $key = $this->getKey($response);
+                            $decodeJson = $this->configs[$key]->decodeJson;
 
-            if ($this->responses === []) {
-                usleep(1000);
+                            $this->results[$key] = $decodeJson ? $response->toArray() : $response->getContent();
 
-                continue;
-            }
+                            if ($this->onSuccess instanceof Closure) {
+                                ($this->onSuccess)($key, $response);
+                            }
 
-            foreach ($this->httpClient->stream($this->responses) as $response => $chunk) {
-                try {
-                    if ($chunk->isTimeout()) {
-                        continue;
-                    }
-
-                    if ($chunk->isFirst()) {
-                        $key = $this->resolveKey($response);
-                        $statusCode = $response->getStatusCode();
-
-                        if ($statusCode < 200 || $statusCode >= 300) {
-                            $failedStatuses[$key] = $statusCode;
+                            unset($this->responses[$key]);
                         }
 
-                        continue;
-                    }
-
-                    if (!$chunk->isLast()) {
-                        continue;
-                    }
-
-                    $key = $this->resolveKey($response);
-                    $config = $this->configs[$key];
-                    unset($this->responses[$key]);
-
-                    if (isset($failedStatuses[$key])) {
-                        $statusCode = $failedStatuses[$key];
-                        unset($failedStatuses[$key]);
-                        $this->handleFailedResponse($key, $config, $response, $statusCode, $results, $logger);
-                    } else {
-                        $results[$key] = $config->decodeJson
-                            ? $response->toArray(false)
-                            : $response->getContent(false);
-
-                        if ($logOnSuccess && $logger !== null) {
-                            $this->callLogger($logger, $response, $response->getStatusCode(), null);
+                    } catch (TransportExceptionInterface | HttpExceptionInterface $e) {
+                        if ($this->handleTransportOrHttpException($response, $e)) {
+                            break;
                         }
                     }
-
-                } catch (TransportExceptionInterface $e) {
-                    $response->cancel();
-                    $key = $this->resolveKey($response);
-                    unset($failedStatuses[$key]);
-                    $this->handleTransportError($key, $response, $e, $results, $logger);
-                }
-
-                if ($this->retryAt !== []) {
-                    break;
                 }
             }
-        }
 
-        $this->reset();
-
-        return $results;
-    }
-
-    private function fireReadyRetries(): void
-    {
-        $now = microtime(true);
-
-        foreach ($this->retryAt as $key => $time) {
-            if ($now < $time) {
-                continue;
-            }
-
-            $config = $this->configs[$key];
-            $options = array_replace_recursive($config->options, $config->retryOptions);
-
-            $this->responses[$key] = $this->httpClient->request(
-                $config->method,
-                $config->url,
-                ['user_data' => $key] + $options,
-            );
-
-            unset($this->retryAt[$key]);
-        }
-    }
-
-    private function resolveKey(ResponseInterface $response): string
-    {
-        $key = $response->getInfo('user_data');
-        \assert(\is_string($key));
-
-        return $key;
-    }
-
-    /**
-     * @param array<string, mixed> $results
-     */
-    private function handleTransportError(
-        string $key,
-        ResponseInterface $response,
-        TransportExceptionInterface $e,
-        array &$results,
-        ?callable $logger,
-    ): void {
-        $config = $this->configs[$key];
-
-        if ($logger !== null) {
-            $this->callLogger($logger, $response, 0, $e);
-        }
-
-        unset($this->responses[$key]);
-
-        if ($config->retryOnTransportException && $this->attempts[$key] < $config->maxRetries) {
-            $this->scheduleRetry($key, $config);
-
-            return;
-        }
-
-        if ($config->throwOnError) {
+        } catch (Throwable $e) {
             $this->cancelAll();
-            $this->reset();
+
+            if (isset($response)) {
+                $key = $this->getKey($response);
+
+                if ($this->onFailure instanceof Closure) {
+                    ($this->onFailure)($key, $response, $e);
+                }
+            }
 
             throw $e;
         }
 
-        $results[$key] = null;
+        return $this->results;
     }
 
-    /**
-     * @param array<string, mixed> $results
-     */
-    private function handleFailedResponse(
-        string $key,
-        RequestConfig $config,
-        ResponseInterface $response,
-        int $statusCode,
-        array &$results,
-        ?callable $logger,
-    ): void {
-        $httpException = $this->captureHttpException($response);
+    private function handleTransportOrHttpException(ResponseInterface $response, TransportExceptionInterface|HttpExceptionInterface $e): bool
+    {
+        $isTransportException = $e instanceof TransportExceptionInterface;
 
-        if ($logger !== null) {
-            $this->callLogger($logger, $response, $statusCode, $httpException);
+        $key = $this->getKey($response);
+        $config = $this->configs[$key];
+
+        if ($isTransportException) {
+            $response->cancel();
         }
 
-        if ($this->attempts[$key] < $config->maxRetries) {
-            $this->scheduleRetry($key, $config);
+        unset($this->responses[$key]);
 
-            return;
+        if (
+            (!$isTransportException || $config->retryOnTransportException)
+            && $this->retriesCount[$key] < $config->maxRetries
+        ) {
+            $retryResponse = $this->retry($key, $config, $e);
+
+            if ($this->onRetry instanceof Closure) {
+                ($this->onRetry)($key, $this->retriesCount[$key], $response, $e, $retryResponse);
+            }
+
+            return true;
+        }
+
+        if ($this->onFailure instanceof Closure) {
+            ($this->onFailure)($key, $response, $e);
         }
 
         if ($config->throwOnError) {
             $this->cancelAll();
-            $this->reset();
 
-            if ($httpException instanceof HttpExceptionInterface) {
-                throw $httpException;
-            }
+            throw $e;
         }
 
-        $results[$key] = null;
+        $this->results[$key] = null;
+
+        return false;
     }
 
-    private function captureHttpException(ResponseInterface $response): ?HttpExceptionInterface
+    private function getKey(ResponseInterface $response): string
     {
-        try {
-            $response->getHeaders(true);
-        } catch (HttpExceptionInterface $e) {
-            return $e;
-        }
+        /** @var array{0: string, 1: mixed} */
+        $userData = $response->getInfo('user_data');
 
-        return null;
+        return $userData[0];
     }
 
-    private function scheduleRetry(string $key, RequestConfig $config): void
+    private function retry(string $key, RequestConfig $config, ExceptionInterface $e): ResponseInterface
     {
-        ++$this->attempts[$key];
-        $delayMs = $config->initialRetryDelayMs * (2 ** ($this->attempts[$key] - 1));
-        $this->retryAt[$key] = microtime(true) + ($delayMs / 1000);
-    }
+        ++$this->retriesCount[$key];
 
-    private function callLogger(
-        callable $logger,
-        ResponseInterface $response,
-        int $statusCode,
-        ?Throwable $exception,
-    ): void {
-        $url = $response->getInfo('url');
-        $url = \is_string($url) ? $url : '';
-        $totalTime = $response->getInfo('total_time');
-        $duration = \is_float($totalTime) ? $totalTime : 0.0;
+        if ($config->retryOptions instanceof Closure) {
+            $retryOptions = ($config->retryOptions)($this->retriesCount[$key], $e);
 
-        try {
-            $headers = $response->getHeaders(false);
-        } catch (TransportExceptionInterface) {
-            $headers = [];
+        } else {
+            $retryOptions = $config->retryOptions;
         }
 
-        try {
-            $body = $response->getContent(false);
-        } catch (TransportExceptionInterface) {
-            $body = '';
-        }
+        $userData = $retryOptions['user_data'] ?? $config->options['user_data'] ?? null;
 
-        $logger($url, $statusCode, $duration, $exception, $headers, $body);
+        $options = array_replace_recursive($config->options, ['user_data' => [$key, $userData]] + $retryOptions);
+
+        return $this->responses[$key] = $this->httpClient->request(
+            method: $config->method,
+            url: $config->url,
+            options: $options,
+        );
     }
 
     private function cancelAll(): void
@@ -277,13 +225,7 @@ final class BatchHttpClient
         foreach ($this->responses as $response) {
             $response->cancel();
         }
-    }
 
-    private function reset(): void
-    {
         $this->responses = [];
-        $this->configs = [];
-        $this->attempts = [];
-        $this->retryAt = [];
     }
 }

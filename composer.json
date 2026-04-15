@@ -19,7 +19,10 @@
     "autoload": {
         "psr-4": {
             "Shoxcie\\BatchHttpClient\\": "src/"
-        }
+        },
+        "files": [
+            "src/Response.php"
+        ]
     },
     "autoload-dev": {
         "psr-4": {
