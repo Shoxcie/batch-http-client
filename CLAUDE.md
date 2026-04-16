@@ -104,7 +104,7 @@ Write comprehensive unit tests using `MockHttpClient` / `MockResponse` / `JsonMo
 - [x] Mixed success/failure results — some 2xx, some errors
 - [x] Retry behavior — verify retry count
 - [x] `throwOnError: true` — exception thrown after retries exhausted, all in-flight cancelled
-- [ ] `throwOnError: false` — failed requests return `null`
+- [x] `throwOnError: false` — failed requests return `null`
 - [ ] Transport exception handling — DNS failure, connection timeout
 - [ ] `retryOnTransportException: true` vs `false`
 - [ ] `onSuccess` / `onRetry` / `onFailure` callbacks — verify they receive correct arguments

@@ -280,3 +280,73 @@ describe('throwOnError: true', function (): void {
 
     test('cancels all in-flight requests on failure', function (): void {})->todo();
 });
+
+describe('throwOnError: false', function (): void {
+    test('failed request returns null in results', function (): void {
+        $mockClient = new MockHttpClient(
+            fn(): JsonMockResponse => new JsonMockResponse([], ['http_code' => 500]),
+        );
+
+        $results = new BatchHttpClient($mockClient)
+            ->request([
+                'api' => new RequestConfig('GET', 'https://api.example.com/api', throwOnError: false),
+            ])
+            ->fetch();
+
+        expect($results['api'])->toBeNull();
+    });
+
+    test('does not throw on failure', function (): void {
+        $mockClient = new MockHttpClient(
+            fn(): JsonMockResponse => new JsonMockResponse([], ['http_code' => 500]),
+        );
+
+        $results = new BatchHttpClient($mockClient)
+            ->request([
+                'api' => new RequestConfig('GET', 'https://api.example.com/api', throwOnError: false),
+            ])
+            ->fetch();
+
+        expect($results)->toHaveKey('api');
+    });
+
+    test('batch continues processing after a failure', function (): void {
+        $mockClient = new MockHttpClient(
+            function (string $method, string $url): JsonMockResponse {
+                if (str_contains($url, '/failing')) {
+                    return new JsonMockResponse([], ['http_code' => 500]);
+                }
+
+                return new JsonMockResponse(['url' => $url]);
+            },
+        );
+
+        $results = new BatchHttpClient($mockClient)
+            ->request([
+                'failing' => new RequestConfig('GET', 'https://api.example.com/failing', throwOnError: false),
+                'ok-1' => new RequestConfig('GET', 'https://api.example.com/ok-1', throwOnError: false),
+                'ok-2' => new RequestConfig('GET', 'https://api.example.com/ok-2', throwOnError: false),
+            ])
+            ->fetch();
+
+        expect($results)->toHaveCount(3)
+            ->and($results['failing'])->toBeNull()
+            ->and($results['ok-1'])->toBe(['url' => 'https://api.example.com/ok-1'])
+            ->and($results['ok-2'])->toBe(['url' => 'https://api.example.com/ok-2']);
+    });
+
+    test('returns null after retries exhausted', function (): void {
+        $mockClient = new MockHttpClient(
+            fn(): JsonMockResponse => new JsonMockResponse([], ['http_code' => 500]),
+        );
+
+        $results = new BatchHttpClient($mockClient)
+            ->request([
+                'api' => new RequestConfig('GET', 'https://api.example.com/api', throwOnError: false, maxRetries: 2),
+            ])
+            ->fetch();
+
+        expect($results['api'])->toBeNull()
+            ->and($mockClient->getRequestsCount())->toBe(3);
+    });
+});
