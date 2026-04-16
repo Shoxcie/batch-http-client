@@ -5,8 +5,10 @@ declare(strict_types=1);
 use Shoxcie\BatchHttpClient\BatchHttpClient;
 use Shoxcie\BatchHttpClient\RequestConfig;
 use Symfony\Component\HttpClient\Exception\ServerException;
+use Symfony\Component\HttpClient\Exception\TransportException;
 use Symfony\Component\HttpClient\MockHttpClient;
 use Symfony\Component\HttpClient\Response\JsonMockResponse;
+use Symfony\Component\HttpClient\Response\MockResponse;
 
 describe('successful batch requests (2xx)', function (): void {
     test('single request returns result with matching key', function (): void {
@@ -338,6 +340,65 @@ describe('throwOnError: false', function (): void {
     test('returns null after retries exhausted', function (): void {
         $mockClient = new MockHttpClient(
             fn(): JsonMockResponse => new JsonMockResponse([], ['http_code' => 500]),
+        );
+
+        $results = new BatchHttpClient($mockClient)
+            ->request([
+                'api' => new RequestConfig('GET', 'https://api.example.com/api', throwOnError: false, maxRetries: 2),
+            ])
+            ->fetch();
+
+        expect($results['api'])->toBeNull()
+            ->and($mockClient->getRequestsCount())->toBe(3);
+    });
+});
+
+describe('transport exception handling', function (): void {
+    test('handles error before headers received', function (): void {
+        $mockClient = new MockHttpClient([
+            new MockResponse(info: ['error' => 'DNS resolution failed']),
+        ]);
+
+        $results = new BatchHttpClient($mockClient)
+            ->request([
+                'api' => new RequestConfig('GET', 'https://api.example.com/api', throwOnError: false),
+            ])
+            ->fetch();
+
+        expect($results['api'])->toBeNull();
+    });
+
+    test('handles error during body streaming', function (): void {
+        $mockClient = new MockHttpClient([
+            new MockResponse([new \RuntimeException('Connection reset')]),
+        ]);
+
+        $results = new BatchHttpClient($mockClient)
+            ->request([
+                'api' => new RequestConfig('GET', 'https://api.example.com/api', throwOnError: false),
+            ])
+            ->fetch();
+
+        expect($results['api'])->toBeNull();
+    });
+
+    test('throws transport exception with throwOnError true', function (): void {
+        $mockClient = new MockHttpClient([
+            new MockResponse(info: ['error' => 'Host unreachable']),
+        ]);
+
+        expect(
+            fn(): array => new BatchHttpClient($mockClient)
+            ->request([
+                'api' => new RequestConfig('GET', 'https://api.example.com/api'),
+            ])
+            ->fetch(),
+        )->toThrow(TransportException::class);
+    });
+
+    test('retries on transport exception by default', function (): void {
+        $mockClient = new MockHttpClient(
+            fn(): MockResponse => new MockResponse(info: ['error' => 'Connection timed out']),
         );
 
         $results = new BatchHttpClient($mockClient)
