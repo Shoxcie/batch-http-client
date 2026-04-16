@@ -600,3 +600,103 @@ describe('decodeJson', function (): void {
             ->and($results['raw'])->toBe('plain text');
     });
 });
+
+describe('retryOptions merging', function (): void {
+    test('retryOptions overrides matching options on retry', function (): void {
+        $capturedHeaders = [];
+        $callCount = 0;
+
+        $mockClient = new MockHttpClient(
+            function (string $method, string $url, array $options) use (&$capturedHeaders, &$callCount): JsonMockResponse {
+                ++$callCount;
+                $capturedHeaders[] = $options['normalized_headers'];
+
+                if ($callCount === 1) {
+                    return new JsonMockResponse([], ['http_code' => 500]);
+                }
+
+                return new JsonMockResponse(['ok' => true]);
+            },
+        );
+
+        new BatchHttpClient($mockClient)
+            ->request([
+                'api' => new RequestConfig(
+                    'GET',
+                    'https://api.example.com/api',
+                    options: ['headers' => ['Authorization' => 'Bearer old']],
+                    retryOptions: ['headers' => ['Authorization' => 'Bearer new']],
+                    maxRetries: 1,
+                ),
+            ])
+            ->fetch();
+
+        expect($capturedHeaders[0]['authorization'])->toBe(['Authorization: Bearer old'])
+            ->and($capturedHeaders[1]['authorization'])->toBe(['Authorization: Bearer new']);
+    });
+
+    test('retryOptions merges nested arrays recursively', function (): void {
+        $capturedHeaders = [];
+        $callCount = 0;
+
+        $mockClient = new MockHttpClient(
+            function (string $method, string $url, array $options) use (&$capturedHeaders, &$callCount): JsonMockResponse {
+                ++$callCount;
+                $capturedHeaders[] = $options['normalized_headers'];
+
+                if ($callCount === 1) {
+                    return new JsonMockResponse([], ['http_code' => 500]);
+                }
+
+                return new JsonMockResponse(['ok' => true]);
+            },
+        );
+
+        new BatchHttpClient($mockClient)
+            ->request([
+                'api' => new RequestConfig(
+                    'GET',
+                    'https://api.example.com/api',
+                    options: ['headers' => ['Accept' => 'application/json', 'Authorization' => 'Bearer token']],
+                    retryOptions: ['headers' => ['X-Retry' => 'true']],
+                    maxRetries: 1,
+                ),
+            ])
+            ->fetch();
+
+        expect($capturedHeaders[1]['accept'])->toBe(['Accept: application/json'])
+            ->and($capturedHeaders[1]['authorization'])->toBe(['Authorization: Bearer token'])
+            ->and($capturedHeaders[1]['x-retry'])->toBe(['X-Retry: true']);
+    });
+
+    test('original options are used when retryOptions is empty', function (): void {
+        $capturedHeaders = [];
+        $callCount = 0;
+
+        $mockClient = new MockHttpClient(
+            function (string $method, string $url, array $options) use (&$capturedHeaders, &$callCount): JsonMockResponse {
+                ++$callCount;
+                $capturedHeaders[] = $options['normalized_headers'];
+
+                if ($callCount === 1) {
+                    return new JsonMockResponse([], ['http_code' => 500]);
+                }
+
+                return new JsonMockResponse(['ok' => true]);
+            },
+        );
+
+        new BatchHttpClient($mockClient)
+            ->request([
+                'api' => new RequestConfig(
+                    'GET',
+                    'https://api.example.com/api',
+                    options: ['headers' => ['Authorization' => 'Bearer token']],
+                    maxRetries: 1,
+                ),
+            ])
+            ->fetch();
+
+        expect($capturedHeaders[1]['authorization'])->toBe(['Authorization: Bearer token']);
+    });
+});

@@ -109,7 +109,7 @@ Write comprehensive unit tests using `MockHttpClient` / `MockResponse` / `JsonMo
 - [x] `retryOnTransportException: true` vs `false`
 - [x] `onSuccess` / `onRetry` / `onFailure` callbacks — verify they receive correct arguments
 - [x] `decodeJson: true` vs `false` — `toArray()` vs `getContent()`
-- [ ] `retryOptions` merging — verify `array_replace_recursive` behavior on retries
+- [x] `retryOptions` merging — verify `array_replace_recursive` behavior on retries
 - [ ] `retryOptions` as Closure — verify dynamic retry options based on attempt/exception
 - [ ] `user_data` preservation — caller's original user_data accessible after batch processing
 - [ ] Safety-net catch — outer `catch(Throwable)` handles unexpected exceptions (e.g. from callbacks, broken JSON with `decodeJson: true`)
