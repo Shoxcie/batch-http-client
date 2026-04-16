@@ -15,7 +15,7 @@ use Throwable;
 
 final class BatchHttpClient
 {
-    private readonly HttpClientInterface $httpClient;
+    private HttpClientInterface $httpClient;
 
     /** @var array<string, RequestConfig> */
     private array $configs = [];
@@ -39,7 +39,7 @@ final class BatchHttpClient
     private ?Closure $onFailure = null;
 
     public function __construct(
-        ?HttpClientInterface $httpClient = null,
+        ?HttpClientInterface $httpClient = null
     ) {
         $this->httpClient = $httpClient ?? HttpClient::create();
     }
@@ -47,7 +47,7 @@ final class BatchHttpClient
     /**
      * @param array<string, RequestConfig> $configs
      */
-    public function request(array $configs): static
+    public function request(array $configs): self
     {
         if ($this->responses !== []) {
             return $this;
@@ -63,9 +63,9 @@ final class BatchHttpClient
             $options = ['user_data' => [$key, $userData]] + $config->options;
 
             $this->responses[$key] = $this->httpClient->request(
-                method: $config->method,
-                url: $config->url,
-                options: $options,
+                $config->method,
+                $config->url,
+                $options,
             );
         }
 
@@ -73,7 +73,7 @@ final class BatchHttpClient
     }
 
     /** @param Closure(string, ResponseInterface): void $closure */
-    public function onSuccess(Closure $closure): static
+    public function onSuccess(Closure $closure): self
     {
         $this->onSuccess = $closure;
 
@@ -81,7 +81,7 @@ final class BatchHttpClient
     }
 
     /** @param Closure(string, int, ResponseInterface, ExceptionInterface, ResponseInterface): void $closure */
-    public function onRetry(Closure $closure): static
+    public function onRetry(Closure $closure): self
     {
         $this->onRetry = $closure;
 
@@ -89,7 +89,7 @@ final class BatchHttpClient
     }
 
     /** @param Closure(string, ResponseInterface, Throwable): void $closure */
-    public function onFailure(Closure $closure): static
+    public function onFailure(Closure $closure): self
     {
         $this->onFailure = $closure;
 
@@ -149,7 +149,8 @@ final class BatchHttpClient
         return $this->results;
     }
 
-    private function handleTransportOrHttpException(ResponseInterface $response, TransportExceptionInterface|HttpExceptionInterface $e): bool
+    /** @param TransportExceptionInterface|HttpExceptionInterface $e */
+    private function handleTransportOrHttpException(ResponseInterface $response, ExceptionInterface $e): bool
     {
         $isTransportException = $e instanceof TransportExceptionInterface;
 
@@ -214,9 +215,9 @@ final class BatchHttpClient
         $options = array_replace_recursive($config->options, ['user_data' => [$key, $userData]] + $retryOptions);
 
         return $this->responses[$key] = $this->httpClient->request(
-            method: $config->method,
-            url: $config->url,
-            options: $options,
+            $config->method,
+            $config->url,
+            $options,
         );
     }
 

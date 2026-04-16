@@ -10,7 +10,6 @@ use Shoxcie\BatchHttpClient\RequestConfig;
 use Symfony\Component\HttpClient\Exception\ServerException;
 use Symfony\Component\HttpClient\Exception\TransportException;
 use Symfony\Component\HttpClient\MockHttpClient;
-use Symfony\Component\HttpClient\Response\JsonMockResponse;
 use Symfony\Component\HttpClient\Response\MockResponse;
 use Symfony\Contracts\HttpClient\Exception\ExceptionInterface;
 use Symfony\Contracts\HttpClient\ResponseInterface;
@@ -21,7 +20,7 @@ describe('successful batch requests (2xx)', function (): void {
             new JsonMockResponse(['id' => 1, 'name' => 'Alice']),
         ]);
 
-        $results = new BatchHttpClient($mockClient)
+        $results = (new BatchHttpClient($mockClient))
             ->request([
                 'users' => new RequestConfig('GET', 'https://api.example.com/users'),
             ])
@@ -41,7 +40,7 @@ describe('successful batch requests (2xx)', function (): void {
             new JsonMockResponse([['sku' => 'A1'], ['sku' => 'B2']]),
         ]);
 
-        $results = new BatchHttpClient($mockClient)
+        $results = (new BatchHttpClient($mockClient))
             ->request([
                 'users' => new RequestConfig('GET', 'https://api.example.com/users'),
                 'orders' => new RequestConfig('GET', 'https://api.example.com/orders'),
@@ -68,7 +67,7 @@ describe('successful batch requests (2xx)', function (): void {
             'key-gamma' => new RequestConfig('GET', 'https://api.example.com/gamma'),
         ];
 
-        $results = new BatchHttpClient($mockClient)
+        $results = (new BatchHttpClient($mockClient))
             ->request($configs)
             ->fetch();
 
@@ -82,7 +81,7 @@ describe('successful batch requests (2xx)', function (): void {
             new JsonMockResponse(['c' => 3]),
         ]);
 
-        $results = new BatchHttpClient($mockClient)
+        $results = (new BatchHttpClient($mockClient))
             ->request([
                 'first' => new RequestConfig('GET', 'https://api.example.com/first'),
                 'second' => new RequestConfig('GET', 'https://api.example.com/second'),
@@ -104,7 +103,7 @@ describe('successful batch requests (2xx)', function (): void {
             },
         );
 
-        $results = new BatchHttpClient($mockClient)
+        $results = (new BatchHttpClient($mockClient))
             ->request([
                 'get' => new RequestConfig('GET', 'https://api.example.com/get'),
                 'post' => new RequestConfig('POST', 'https://api.example.com/post'),
@@ -131,11 +130,11 @@ describe('mixed success/failure results', function (): void {
             },
         );
 
-        $results = new BatchHttpClient($mockClient)
+        $results = (new BatchHttpClient($mockClient))
             ->request([
-                'users' => new RequestConfig('GET', 'https://api.example.com/users', throwOnError: false),
-                'failing' => new RequestConfig('GET', 'https://api.example.com/failing', throwOnError: false),
-                'orders' => new RequestConfig('GET', 'https://api.example.com/orders', throwOnError: false),
+                'users' => new RequestConfig('GET', 'https://api.example.com/users', [], [], false),
+                'failing' => new RequestConfig('GET', 'https://api.example.com/failing', [], [], false),
+                'orders' => new RequestConfig('GET', 'https://api.example.com/orders', [], [], false),
             ])
             ->fetch();
 
@@ -160,13 +159,13 @@ describe('mixed success/failure results', function (): void {
         );
 
         $configs = [
-            'ok-1' => new RequestConfig('GET', 'https://api.example.com/ok-1', throwOnError: false),
-            'not-found' => new RequestConfig('GET', 'https://api.example.com/not-found', throwOnError: false),
-            'ok-2' => new RequestConfig('GET', 'https://api.example.com/ok-2', throwOnError: false),
-            'error' => new RequestConfig('GET', 'https://api.example.com/error', throwOnError: false),
+            'ok-1' => new RequestConfig('GET', 'https://api.example.com/ok-1', [], [], false),
+            'not-found' => new RequestConfig('GET', 'https://api.example.com/not-found', [], [], false),
+            'ok-2' => new RequestConfig('GET', 'https://api.example.com/ok-2', [], [], false),
+            'error' => new RequestConfig('GET', 'https://api.example.com/error', [], [], false),
         ];
 
-        $results = new BatchHttpClient($mockClient)
+        $results = (new BatchHttpClient($mockClient))
             ->request($configs)
             ->fetch();
 
@@ -180,9 +179,9 @@ describe('retry behavior', function (): void {
             fn(): JsonMockResponse => new JsonMockResponse([], ['http_code' => 500]),
         );
 
-        new BatchHttpClient($mockClient)
+        (new BatchHttpClient($mockClient))
             ->request([
-                'api' => new RequestConfig('GET', 'https://api.example.com/api', throwOnError: false, maxRetries: 3),
+                'api' => new RequestConfig('GET', 'https://api.example.com/api', [], [], false, true, 3),
             ])
             ->fetch();
 
@@ -194,9 +193,9 @@ describe('retry behavior', function (): void {
             fn(): JsonMockResponse => new JsonMockResponse([], ['http_code' => 500]),
         );
 
-        new BatchHttpClient($mockClient)
+        (new BatchHttpClient($mockClient))
             ->request([
-                'api' => new RequestConfig('GET', 'https://api.example.com/api', throwOnError: false),
+                'api' => new RequestConfig('GET', 'https://api.example.com/api', [], [], false),
             ])
             ->fetch();
 
@@ -218,9 +217,9 @@ describe('retry behavior', function (): void {
             },
         );
 
-        $results = new BatchHttpClient($mockClient)
+        $results = (new BatchHttpClient($mockClient))
             ->request([
-                'api' => new RequestConfig('GET', 'https://api.example.com/api', maxRetries: 3),
+                'api' => new RequestConfig('GET', 'https://api.example.com/api', [], [], true, true, 3),
             ])
             ->fetch();
 
@@ -240,10 +239,10 @@ describe('retry behavior', function (): void {
             },
         );
 
-        new BatchHttpClient($mockClient)
+        (new BatchHttpClient($mockClient))
             ->request([
-                'alpha' => new RequestConfig('GET', 'https://api.example.com/alpha', throwOnError: false, maxRetries: 2),
-                'beta' => new RequestConfig('GET', 'https://api.example.com/beta', throwOnError: false, maxRetries: 4),
+                'alpha' => new RequestConfig('GET', 'https://api.example.com/alpha', [], [], false, true, 2),
+                'beta' => new RequestConfig('GET', 'https://api.example.com/beta', [], [], false, true, 4),
             ])
             ->fetch();
 
@@ -259,9 +258,9 @@ describe('throwOnError: true', function (): void {
         );
 
         expect(
-            fn(): array => new BatchHttpClient($mockClient)
+            fn(): array => (new BatchHttpClient($mockClient))
             ->request([
-                'api' => new RequestConfig('GET', 'https://api.example.com/api', maxRetries: 2),
+                'api' => new RequestConfig('GET', 'https://api.example.com/api', [], [], true, true, 2),
             ])
             ->fetch(),
         )->toThrow(ServerException::class);
@@ -275,7 +274,7 @@ describe('throwOnError: true', function (): void {
         );
 
         expect(
-            fn(): array => new BatchHttpClient($mockClient)
+            fn(): array => (new BatchHttpClient($mockClient))
             ->request([
                 'api' => new RequestConfig('GET', 'https://api.example.com/api'),
             ])
@@ -285,7 +284,7 @@ describe('throwOnError: true', function (): void {
         expect($mockClient->getRequestsCount())->toBe(1);
     });
 
-    test('cancels all in-flight requests on failure', function (): void {})->todo();
+    // TODO: test('cancels all in-flight requests on failure', function (): void {})->todo();
 });
 
 describe('throwOnError: false', function (): void {
@@ -294,9 +293,9 @@ describe('throwOnError: false', function (): void {
             fn(): JsonMockResponse => new JsonMockResponse([], ['http_code' => 500]),
         );
 
-        $results = new BatchHttpClient($mockClient)
+        $results = (new BatchHttpClient($mockClient))
             ->request([
-                'api' => new RequestConfig('GET', 'https://api.example.com/api', throwOnError: false),
+                'api' => new RequestConfig('GET', 'https://api.example.com/api', [], [], false),
             ])
             ->fetch();
 
@@ -308,9 +307,9 @@ describe('throwOnError: false', function (): void {
             fn(): JsonMockResponse => new JsonMockResponse([], ['http_code' => 500]),
         );
 
-        $results = new BatchHttpClient($mockClient)
+        $results = (new BatchHttpClient($mockClient))
             ->request([
-                'api' => new RequestConfig('GET', 'https://api.example.com/api', throwOnError: false),
+                'api' => new RequestConfig('GET', 'https://api.example.com/api', [], [], false),
             ])
             ->fetch();
 
@@ -328,11 +327,11 @@ describe('throwOnError: false', function (): void {
             },
         );
 
-        $results = new BatchHttpClient($mockClient)
+        $results = (new BatchHttpClient($mockClient))
             ->request([
-                'failing' => new RequestConfig('GET', 'https://api.example.com/failing', throwOnError: false),
-                'ok-1' => new RequestConfig('GET', 'https://api.example.com/ok-1', throwOnError: false),
-                'ok-2' => new RequestConfig('GET', 'https://api.example.com/ok-2', throwOnError: false),
+                'failing' => new RequestConfig('GET', 'https://api.example.com/failing', [], [], false),
+                'ok-1' => new RequestConfig('GET', 'https://api.example.com/ok-1', [], [], false),
+                'ok-2' => new RequestConfig('GET', 'https://api.example.com/ok-2', [], [], false),
             ])
             ->fetch();
 
@@ -347,9 +346,9 @@ describe('throwOnError: false', function (): void {
             fn(): JsonMockResponse => new JsonMockResponse([], ['http_code' => 500]),
         );
 
-        $results = new BatchHttpClient($mockClient)
+        $results = (new BatchHttpClient($mockClient))
             ->request([
-                'api' => new RequestConfig('GET', 'https://api.example.com/api', throwOnError: false, maxRetries: 2),
+                'api' => new RequestConfig('GET', 'https://api.example.com/api', [], [], false, true, 2),
             ])
             ->fetch();
 
@@ -361,12 +360,12 @@ describe('throwOnError: false', function (): void {
 describe('transport exception handling', function (): void {
     test('handles error before headers received', function (): void {
         $mockClient = new MockHttpClient([
-            new MockResponse(info: ['error' => 'DNS resolution failed']),
+            new MockResponse([], ['error' => 'DNS resolution failed']),
         ]);
 
-        $results = new BatchHttpClient($mockClient)
+        $results = (new BatchHttpClient($mockClient))
             ->request([
-                'api' => new RequestConfig('GET', 'https://api.example.com/api', throwOnError: false),
+                'api' => new RequestConfig('GET', 'https://api.example.com/api', [], [], false),
             ])
             ->fetch();
 
@@ -374,13 +373,19 @@ describe('transport exception handling', function (): void {
     });
 
     test('handles error during body streaming', function (): void {
+        /** @var \Generator<int, string> $body */
+        $body = (function (): \Generator {
+            yield '';
+            throw new \RuntimeException('Connection reset');
+        })();
+
         $mockClient = new MockHttpClient([
-            new MockResponse([new \RuntimeException('Connection reset')]),
+            new MockResponse($body),
         ]);
 
-        $results = new BatchHttpClient($mockClient)
+        $results = (new BatchHttpClient($mockClient))
             ->request([
-                'api' => new RequestConfig('GET', 'https://api.example.com/api', throwOnError: false),
+                'api' => new RequestConfig('GET', 'https://api.example.com/api', [], [], false),
             ])
             ->fetch();
 
@@ -389,11 +394,11 @@ describe('transport exception handling', function (): void {
 
     test('throws transport exception with throwOnError true', function (): void {
         $mockClient = new MockHttpClient([
-            new MockResponse(info: ['error' => 'Host unreachable']),
+            new MockResponse([], ['error' => 'Host unreachable']),
         ]);
 
         expect(
-            fn(): array => new BatchHttpClient($mockClient)
+            fn(): array => (new BatchHttpClient($mockClient))
             ->request([
                 'api' => new RequestConfig('GET', 'https://api.example.com/api'),
             ])
@@ -403,12 +408,12 @@ describe('transport exception handling', function (): void {
 
     test('retries on transport exception by default', function (): void {
         $mockClient = new MockHttpClient(
-            fn(): MockResponse => new MockResponse(info: ['error' => 'Connection timed out']),
+            fn(): MockResponse => new MockResponse([], ['error' => 'Connection timed out']),
         );
 
-        $results = new BatchHttpClient($mockClient)
+        $results = (new BatchHttpClient($mockClient))
             ->request([
-                'api' => new RequestConfig('GET', 'https://api.example.com/api', throwOnError: false, maxRetries: 2),
+                'api' => new RequestConfig('GET', 'https://api.example.com/api', [], [], false, true, 2),
             ])
             ->fetch();
 
@@ -420,12 +425,12 @@ describe('transport exception handling', function (): void {
 describe('retryOnTransportException', function (): void {
     test('retries transport exception when true', function (): void {
         $mockClient = new MockHttpClient(
-            fn(): MockResponse => new MockResponse(info: ['error' => 'Connection timed out']),
+            fn(): MockResponse => new MockResponse([], ['error' => 'Connection timed out']),
         );
 
-        $results = new BatchHttpClient($mockClient)
+        $results = (new BatchHttpClient($mockClient))
             ->request([
-                'api' => new RequestConfig('GET', 'https://api.example.com/api', throwOnError: false, maxRetries: 2, retryOnTransportException: true),
+                'api' => new RequestConfig('GET', 'https://api.example.com/api', [], [], false, true, 2, true),
             ])
             ->fetch();
 
@@ -435,12 +440,12 @@ describe('retryOnTransportException', function (): void {
 
     test('does not retry transport exception when false', function (): void {
         $mockClient = new MockHttpClient(
-            fn(): MockResponse => new MockResponse(info: ['error' => 'DNS resolution failed']),
+            fn(): MockResponse => new MockResponse([], ['error' => 'DNS resolution failed']),
         );
 
-        $results = new BatchHttpClient($mockClient)
+        $results = (new BatchHttpClient($mockClient))
             ->request([
-                'api' => new RequestConfig('GET', 'https://api.example.com/api', throwOnError: false, maxRetries: 2, retryOnTransportException: false),
+                'api' => new RequestConfig('GET', 'https://api.example.com/api', [], [], false, true, 2, false),
             ])
             ->fetch();
 
@@ -453,9 +458,9 @@ describe('retryOnTransportException', function (): void {
             fn(): JsonMockResponse => new JsonMockResponse([], ['http_code' => 500]),
         );
 
-        $results = new BatchHttpClient($mockClient)
+        $results = (new BatchHttpClient($mockClient))
             ->request([
-                'api' => new RequestConfig('GET', 'https://api.example.com/api', throwOnError: false, maxRetries: 2, retryOnTransportException: false),
+                'api' => new RequestConfig('GET', 'https://api.example.com/api', [], [], false, true, 2, false),
             ])
             ->fetch();
 
@@ -473,7 +478,7 @@ describe('callbacks', function (): void {
             new JsonMockResponse(['id' => 2]),
         ]);
 
-        new BatchHttpClient($mockClient)
+        (new BatchHttpClient($mockClient))
             ->request([
                 'users' => new RequestConfig('GET', 'https://api.example.com/users'),
                 'orders' => new RequestConfig('GET', 'https://api.example.com/orders'),
@@ -506,9 +511,9 @@ describe('callbacks', function (): void {
             },
         );
 
-        new BatchHttpClient($mockClient)
+        (new BatchHttpClient($mockClient))
             ->request([
-                'api' => new RequestConfig('GET', 'https://api.example.com/api', maxRetries: 2),
+                'api' => new RequestConfig('GET', 'https://api.example.com/api', [], [], true, true, 2),
             ])
             ->onRetry(function (string $key, int $attempt, ResponseInterface $failedResponse, ExceptionInterface $e, ResponseInterface $retryResponse) use (&$captured): void {
                 $captured[] = [
@@ -536,9 +541,9 @@ describe('callbacks', function (): void {
             new JsonMockResponse([], ['http_code' => 500]),
         ]);
 
-        new BatchHttpClient($mockClient)
+        (new BatchHttpClient($mockClient))
             ->request([
-                'api' => new RequestConfig('GET', 'https://api.example.com/api', throwOnError: false),
+                'api' => new RequestConfig('GET', 'https://api.example.com/api', [], [], false),
             ])
             ->onFailure(function (string $key, ResponseInterface $response, \Throwable $e) use (&$captured): void {
                 $captured[] = ['key' => $key, 'response' => $response, 'exception' => $e];
@@ -558,7 +563,7 @@ describe('decodeJson', function (): void {
             new JsonMockResponse(['id' => 1, 'name' => 'test']),
         ]);
 
-        $results = new BatchHttpClient($mockClient)
+        $results = (new BatchHttpClient($mockClient))
             ->request([
                 'api' => new RequestConfig('GET', 'https://api.example.com/api'),
             ])
@@ -572,9 +577,9 @@ describe('decodeJson', function (): void {
             new MockResponse('raw body content'),
         ]);
 
-        $results = new BatchHttpClient($mockClient)
+        $results = (new BatchHttpClient($mockClient))
             ->request([
-                'api' => new RequestConfig('GET', 'https://api.example.com/api', decodeJson: false),
+                'api' => new RequestConfig('GET', 'https://api.example.com/api', [], [], true, false),
             ])
             ->fetch();
 
@@ -592,10 +597,10 @@ describe('decodeJson', function (): void {
             },
         );
 
-        $results = new BatchHttpClient($mockClient)
+        $results = (new BatchHttpClient($mockClient))
             ->request([
                 'json' => new RequestConfig('GET', 'https://api.example.com/json'),
-                'raw' => new RequestConfig('GET', 'https://api.example.com/raw', decodeJson: false),
+                'raw' => new RequestConfig('GET', 'https://api.example.com/raw', [], [], true, false),
             ])
             ->fetch();
 
@@ -622,14 +627,16 @@ describe('retryOptions merging', function (): void {
             },
         );
 
-        new BatchHttpClient($mockClient)
+        (new BatchHttpClient($mockClient))
             ->request([
                 'api' => new RequestConfig(
                     'GET',
                     'https://api.example.com/api',
-                    options: ['headers' => ['Authorization' => 'Bearer old']],
-                    retryOptions: ['headers' => ['Authorization' => 'Bearer new']],
-                    maxRetries: 1,
+                    ['headers' => ['Authorization' => 'Bearer old']],
+                    ['headers' => ['Authorization' => 'Bearer new']],
+                    true,
+                    true,
+                    1,
                 ),
             ])
             ->fetch();
@@ -655,14 +662,16 @@ describe('retryOptions merging', function (): void {
             },
         );
 
-        new BatchHttpClient($mockClient)
+        (new BatchHttpClient($mockClient))
             ->request([
                 'api' => new RequestConfig(
                     'GET',
                     'https://api.example.com/api',
-                    options: ['headers' => ['Accept' => 'application/json', 'Authorization' => 'Bearer token']],
-                    retryOptions: ['headers' => ['X-Retry' => 'true']],
-                    maxRetries: 1,
+                    ['headers' => ['Accept' => 'application/json', 'Authorization' => 'Bearer token']],
+                    ['headers' => ['X-Retry' => 'true']],
+                    true,
+                    true,
+                    1,
                 ),
             ])
             ->fetch();
@@ -689,13 +698,16 @@ describe('retryOptions merging', function (): void {
             },
         );
 
-        new BatchHttpClient($mockClient)
+        (new BatchHttpClient($mockClient))
             ->request([
                 'api' => new RequestConfig(
                     'GET',
                     'https://api.example.com/api',
-                    options: ['headers' => ['Authorization' => 'Bearer token']],
-                    maxRetries: 1,
+                    ['headers' => ['Authorization' => 'Bearer token']],
+                    [],
+                    true,
+                    true,
+                    1,
                 ),
             ])
             ->fetch();
@@ -721,17 +733,20 @@ describe('retryOptions as Closure', function (): void {
             },
         );
 
-        new BatchHttpClient($mockClient)
+        (new BatchHttpClient($mockClient))
             ->request([
                 'api' => new RequestConfig(
                     'GET',
                     'https://api.example.com/api',
-                    retryOptions: function (int $attempt, \Throwable $e) use (&$captured): array {
+                    [],
+                    function (int $attempt, \Throwable $e) use (&$captured): array {
                         $captured[] = ['attempt' => $attempt, 'exception' => $e];
 
                         return [];
                     },
-                    maxRetries: 2,
+                    true,
+                    true,
+                    2,
                 ),
             ])
             ->fetch();
@@ -760,13 +775,16 @@ describe('retryOptions as Closure', function (): void {
             },
         );
 
-        new BatchHttpClient($mockClient)
+        (new BatchHttpClient($mockClient))
             ->request([
                 'api' => new RequestConfig(
                     'GET',
                     'https://api.example.com/api',
-                    retryOptions: fn(int $attempt, \Throwable $e): array => ['headers' => ['X-Attempt' => '1']],
-                    maxRetries: 1,
+                    [],
+                    fn(int $attempt, \Throwable $e): array => ['headers' => ['X-Attempt' => '1']],
+                    true,
+                    true,
+                    1,
                 ),
             ])
             ->fetch();
@@ -792,13 +810,16 @@ describe('retryOptions as Closure', function (): void {
             },
         );
 
-        new BatchHttpClient($mockClient)
+        (new BatchHttpClient($mockClient))
             ->request([
                 'api' => new RequestConfig(
                     'GET',
                     'https://api.example.com/api',
-                    retryOptions: fn(int $attempt, \Throwable $e): array => ['headers' => ['X-Attempt' => (string) $attempt]],
-                    maxRetries: 2,
+                    [],
+                    fn(int $attempt, \Throwable $e): array => ['headers' => ['X-Attempt' => (string) $attempt]],
+                    true,
+                    true,
+                    2,
                 ),
             ])
             ->fetch();
@@ -816,12 +837,12 @@ describe('user_data preservation', function (): void {
             new JsonMockResponse(['ok' => true]),
         ]);
 
-        new BatchHttpClient($mockClient)
+        (new BatchHttpClient($mockClient))
             ->request([
                 'api' => new RequestConfig(
                     'GET',
                     'https://api.example.com/api',
-                    options: ['user_data' => ['my' => 'data']],
+                    ['user_data' => ['my' => 'data']],
                 ),
             ])
             ->onSuccess(function (string $key, ResponseInterface $response) use (&$captured): void {
@@ -839,13 +860,14 @@ describe('user_data preservation', function (): void {
             new JsonMockResponse([], ['http_code' => 500]),
         ]);
 
-        new BatchHttpClient($mockClient)
+        (new BatchHttpClient($mockClient))
             ->request([
                 'api' => new RequestConfig(
                     'GET',
                     'https://api.example.com/api',
-                    options: ['user_data' => 'fail-token'],
-                    throwOnError: false,
+                    ['user_data' => 'fail-token'],
+                    [],
+                    false,
                 ),
             ])
             ->onFailure(function (string $key, ResponseInterface $response, \Throwable $e) use (&$captured): void {
@@ -873,13 +895,16 @@ describe('user_data preservation', function (): void {
             },
         );
 
-        new BatchHttpClient($mockClient)
+        (new BatchHttpClient($mockClient))
             ->request([
                 'api' => new RequestConfig(
                     'GET',
                     'https://api.example.com/api',
-                    options: ['user_data' => 42],
-                    maxRetries: 1,
+                    ['user_data' => 42],
+                    [],
+                    true,
+                    true,
+                    1,
                 ),
             ])
             ->onRetry(function (string $key, int $attempt, ResponseInterface $failedResponse, ExceptionInterface $e, ResponseInterface $retryResponse) use (&$onRetryCaptured): void {
@@ -901,7 +926,7 @@ describe('user_data preservation', function (): void {
             new JsonMockResponse(['ok' => true]),
         ]);
 
-        new BatchHttpClient($mockClient)
+        (new BatchHttpClient($mockClient))
             ->request([
                 'api' => new RequestConfig('GET', 'https://api.example.com/api'),
             ])
@@ -921,7 +946,7 @@ describe('safety-net catch', function (): void {
         ]);
 
         expect(
-            fn(): array => new BatchHttpClient($mockClient)
+            fn(): array => (new BatchHttpClient($mockClient))
             ->request([
                 'api' => new RequestConfig('GET', 'https://api.example.com/api'),
             ])
@@ -938,7 +963,7 @@ describe('safety-net catch', function (): void {
         ]);
 
         try {
-            new BatchHttpClient($mockClient)
+            (new BatchHttpClient($mockClient))
                 ->request([
                     'api' => new RequestConfig('GET', 'https://api.example.com/api'),
                 ])
@@ -962,7 +987,7 @@ describe('safety-net catch', function (): void {
         ]);
 
         expect(
-            fn(): array => new BatchHttpClient($mockClient)
+            fn(): array => (new BatchHttpClient($mockClient))
                 ->request([
                     'api' => new RequestConfig('GET', 'https://api.example.com/api'),
                 ])
@@ -981,11 +1006,11 @@ describe('safety-net catch', function (): void {
         ]);
 
         expect(
-            fn(): array => new BatchHttpClient($mockClient)
+            fn(): array => (new BatchHttpClient($mockClient))
                 ->request([
-                    'a' => new RequestConfig('GET', 'https://api.example.com/a', maxRetries: 3),
-                    'b' => new RequestConfig('GET', 'https://api.example.com/b', maxRetries: 3),
-                    'c' => new RequestConfig('GET', 'https://api.example.com/c', maxRetries: 3),
+                    'a' => new RequestConfig('GET', 'https://api.example.com/a', [], [], true, true, 3),
+                    'b' => new RequestConfig('GET', 'https://api.example.com/b', [], [], true, true, 3),
+                    'c' => new RequestConfig('GET', 'https://api.example.com/c', [], [], true, true, 3),
                 ])
                 ->onSuccess(function (string $key, ResponseInterface $response): void {
                     throw new \RuntimeException('boom');

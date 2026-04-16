@@ -21,6 +21,7 @@ phpstan.neon
 
 # PHPUnit / Pest
 .phpunit.cache/
+.phpunit.result.cache
 
 # Coverage
 coverage/

@@ -61,69 +61,72 @@ function simpleLog(
 function logSuccess(string $key, ResponseInterface $response): void
 {
     simpleLog(
-        prefix: 'SUCCESS',
-        key: $key,
-        url: getUrl($response),
-        duration: getTotalTime($response),
-        statusCode: getStatusCode($response),
-        headers: getHeaders($response),
-        body: getContent($response),
+        'SUCCESS',
+        $key,
+        getUrl($response),
+        getTotalTime($response),
+        null,
+        null,
+        getStatusCode($response),
+        getHeaders($response),
+        getContent($response),
     );
 }
 
 function logRetry(string $key, int $attempt, ResponseInterface $response, ExceptionInterface $e, ResponseInterface $retryResponse): void
 {
     simpleLog(
-        prefix: 'RETRY',
-        key: $key,
-        url: getUrl($response),
-        duration: getTotalTime($response),
-        attempt: $attempt,
-        exceptionMessage: $e->getMessage(),
-        statusCode: getStatusCode($response),
-        headers: getHeaders($response),
-        body: getContent($response),
+        'RETRY',
+        $key,
+        getUrl($response),
+        getTotalTime($response),
+        $e->getMessage(),
+        $attempt,
+        getStatusCode($response),
+        getHeaders($response),
+        getContent($response),
     );
 }
 
 function logFailure(string $key, ResponseInterface $response, Throwable $e): void
 {
     simpleLog(
-        prefix: 'FAILURE',
-        key: $key,
-        url: getUrl($response),
-        duration: getTotalTime($response),
-        exceptionMessage: $e->getMessage(),
-        statusCode: getStatusCode($response),
-        headers: getHeaders($response),
-        body: getContent($response),
+        'FAILURE',
+        $key,
+        getUrl($response),
+        getTotalTime($response),
+        $e->getMessage(),
+        null,
+        getStatusCode($response),
+        getHeaders($response),
+        getContent($response),
     );
 }
 
 $scriptStartTime = microtime(true);
 
-$client = new BatchHttpClient()
-    ->onSuccess(logSuccess(...))
-    ->onRetry(logRetry(...))
-    ->onFailure(logFailure(...));
+$client = (new BatchHttpClient())
+    ->onSuccess(Closure::fromCallable('logSuccess'))
+    ->onRetry(Closure::fromCallable('logRetry'))
+    ->onFailure(Closure::fromCallable('logFailure'));
 
 $requestsStartTime = microtime(true);
 
 try {
     $result = $client->request([
         'Request 1' => new RequestConfig('GET', '',
-            options:      ['base_uri' => 'https://httpbin.org/delay/7', 'timeout' =>  5, 'max_duration' =>  5],
-            retryOptions: ['base_uri' => 'https://httpbin.org/get',     'timeout' =>  1, 'max_duration' =>  1],
-            throwOnError: false,
-            decodeJson:   true,
-            maxRetries:   1
+            ['base_uri' => 'https://httpbin.org/delay/7', 'timeout' =>  5, 'max_duration' =>  5],
+            ['base_uri' => 'https://httpbin.org/get',     'timeout' =>  1, 'max_duration' =>  1],
+            false,
+            true,
+            1
         ),
         'Request 2' => new RequestConfig('GET', '',
-            options:      ['base_uri' => 'https://httpbin.org/delay/7',  'timeout' =>  1, 'max_duration' =>  1],
-            retryOptions: ['base_uri' => 'https://httpbin.org/delay/10', 'timeout' =>  2, 'max_duration' =>  2],
-            throwOnError: false,
-            decodeJson:   true,
-            maxRetries:   1
+            ['base_uri' => 'https://httpbin.org/delay/7',  'timeout' =>  1, 'max_duration' =>  1],
+            ['base_uri' => 'https://httpbin.org/delay/10', 'timeout' =>  2, 'max_duration' =>  2],
+            false,
+            true,
+            1
         ),
     ])->fetch();
 

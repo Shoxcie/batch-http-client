@@ -34,11 +34,14 @@ function getStatusCode(ResponseInterface $response, bool $throw = false): int
     return 0;
 }
 
-/** @return array<string, mixed> */
+/** @return array<string, string[]> */
 function getHeaders(ResponseInterface $response, bool $throw = false): array
 {
     try {
-        return $response->getHeaders();
+        /** @var array<string, string[]> */
+        $headers = $response->getHeaders();
+
+        return $headers;
 
     } catch (ExceptionInterface $e) {
         if ($throw) {
@@ -63,7 +66,8 @@ function getContent(ResponseInterface $response, bool $throw = false): string
     return '';
 }
 
-function getUserData(ResponseInterface $response): mixed
+/** @return mixed */
+function getUserData(ResponseInterface $response)
 {
     /** @var array{0: string, 1: mixed} */
     $userData = $response->getInfo('user_data');
