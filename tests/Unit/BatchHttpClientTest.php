@@ -548,3 +548,55 @@ describe('callbacks', function (): void {
             ->and($captured[0]['exception'])->toBeInstanceOf(\Throwable::class);
     });
 });
+
+describe('decodeJson', function (): void {
+    test('returns decoded array when decodeJson is true', function (): void {
+        $mockClient = new MockHttpClient([
+            new JsonMockResponse(['id' => 1, 'name' => 'test']),
+        ]);
+
+        $results = new BatchHttpClient($mockClient)
+            ->request([
+                'api' => new RequestConfig('GET', 'https://api.example.com/api'),
+            ])
+            ->fetch();
+
+        expect($results['api'])->toBe(['id' => 1, 'name' => 'test']);
+    });
+
+    test('returns raw string when decodeJson is false', function (): void {
+        $mockClient = new MockHttpClient([
+            new MockResponse('raw body content'),
+        ]);
+
+        $results = new BatchHttpClient($mockClient)
+            ->request([
+                'api' => new RequestConfig('GET', 'https://api.example.com/api', decodeJson: false),
+            ])
+            ->fetch();
+
+        expect($results['api'])->toBe('raw body content');
+    });
+
+    test('each request respects its own decodeJson setting', function (): void {
+        $mockClient = new MockHttpClient(
+            function (string $method, string $url): MockResponse {
+                if (str_contains($url, '/json')) {
+                    return new JsonMockResponse(['decoded' => true]);
+                }
+
+                return new MockResponse('plain text');
+            },
+        );
+
+        $results = new BatchHttpClient($mockClient)
+            ->request([
+                'json' => new RequestConfig('GET', 'https://api.example.com/json'),
+                'raw' => new RequestConfig('GET', 'https://api.example.com/raw', decodeJson: false),
+            ])
+            ->fetch();
+
+        expect($results['json'])->toBe(['decoded' => true])
+            ->and($results['raw'])->toBe('plain text');
+    });
+});
