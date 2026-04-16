@@ -106,7 +106,7 @@ Write comprehensive unit tests using `MockHttpClient` / `MockResponse` / `JsonMo
 - [x] `throwOnError: true` — exception thrown after retries exhausted, all in-flight cancelled
 - [x] `throwOnError: false` — failed requests return `null`
 - [x] Transport exception handling — DNS failure, connection timeout
-- [ ] `retryOnTransportException: true` vs `false`
+- [x] `retryOnTransportException: true` vs `false`
 - [ ] `onSuccess` / `onRetry` / `onFailure` callbacks — verify they receive correct arguments
 - [ ] `decodeJson: true` vs `false` — `toArray()` vs `getContent()`
 - [ ] `retryOptions` merging — verify `array_replace_recursive` behavior on retries

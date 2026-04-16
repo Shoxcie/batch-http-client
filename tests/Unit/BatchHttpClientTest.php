@@ -411,3 +411,50 @@ describe('transport exception handling', function (): void {
             ->and($mockClient->getRequestsCount())->toBe(3);
     });
 });
+
+describe('retryOnTransportException', function (): void {
+    test('retries transport exception when true', function (): void {
+        $mockClient = new MockHttpClient(
+            fn(): MockResponse => new MockResponse(info: ['error' => 'Connection timed out']),
+        );
+
+        $results = new BatchHttpClient($mockClient)
+            ->request([
+                'api' => new RequestConfig('GET', 'https://api.example.com/api', throwOnError: false, maxRetries: 2, retryOnTransportException: true),
+            ])
+            ->fetch();
+
+        expect($results['api'])->toBeNull()
+            ->and($mockClient->getRequestsCount())->toBe(3);
+    });
+
+    test('does not retry transport exception when false', function (): void {
+        $mockClient = new MockHttpClient(
+            fn(): MockResponse => new MockResponse(info: ['error' => 'DNS resolution failed']),
+        );
+
+        $results = new BatchHttpClient($mockClient)
+            ->request([
+                'api' => new RequestConfig('GET', 'https://api.example.com/api', throwOnError: false, maxRetries: 2, retryOnTransportException: false),
+            ])
+            ->fetch();
+
+        expect($results['api'])->toBeNull()
+            ->and($mockClient->getRequestsCount())->toBe(1);
+    });
+
+    test('still retries HTTP exceptions when false', function (): void {
+        $mockClient = new MockHttpClient(
+            fn(): JsonMockResponse => new JsonMockResponse([], ['http_code' => 500]),
+        );
+
+        $results = new BatchHttpClient($mockClient)
+            ->request([
+                'api' => new RequestConfig('GET', 'https://api.example.com/api', throwOnError: false, maxRetries: 2, retryOnTransportException: false),
+            ])
+            ->fetch();
+
+        expect($results['api'])->toBeNull()
+            ->and($mockClient->getRequestsCount())->toBe(3);
+    });
+});
