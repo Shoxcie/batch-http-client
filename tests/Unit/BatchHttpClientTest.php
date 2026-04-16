@@ -164,5 +164,82 @@ describe('mixed success/failure results', function (): void {
 
         expect(array_keys($results))->toEqualCanonicalizing(array_keys($configs));
     });
+});
 
+describe('retry behavior', function (): void {
+    test('retries up to maxRetries times on failure', function (): void {
+        $mockClient = new MockHttpClient(
+            fn(): JsonMockResponse => new JsonMockResponse([], ['http_code' => 500]),
+        );
+
+        new BatchHttpClient($mockClient)
+            ->request([
+                'api' => new RequestConfig('GET', 'https://api.example.com/api', maxRetries: 3, throwOnError: false),
+            ])
+            ->fetch();
+
+        expect($mockClient->getRequestsCount())->toBe(4);
+    });
+
+    test('does not retry when maxRetries is zero', function (): void {
+        $mockClient = new MockHttpClient(
+            fn(): JsonMockResponse => new JsonMockResponse([], ['http_code' => 500]),
+        );
+
+        new BatchHttpClient($mockClient)
+            ->request([
+                'api' => new RequestConfig('GET', 'https://api.example.com/api', throwOnError: false),
+            ])
+            ->fetch();
+
+        expect($mockClient->getRequestsCount())->toBe(1);
+    });
+
+    test('stops retrying after first success', function (): void {
+        $callCount = 0;
+
+        $mockClient = new MockHttpClient(
+            function () use (&$callCount): JsonMockResponse {
+                ++$callCount;
+
+                if ($callCount === 1) {
+                    return new JsonMockResponse([], ['http_code' => 500]);
+                }
+
+                return new JsonMockResponse(['ok' => true]);
+            },
+        );
+
+        $results = new BatchHttpClient($mockClient)
+            ->request([
+                'api' => new RequestConfig('GET', 'https://api.example.com/api', maxRetries: 3),
+            ])
+            ->fetch();
+
+        expect($results['api'])->toBe(['ok' => true])
+            ->and($mockClient->getRequestsCount())->toBe(2);
+    });
+
+    test('each request retries independently', function (): void {
+        $callCounts = ['alpha' => 0, 'beta' => 0];
+
+        $mockClient = new MockHttpClient(
+            function (string $method, string $url) use (&$callCounts): JsonMockResponse {
+                $key = str_contains($url, '/alpha') ? 'alpha' : 'beta';
+                ++$callCounts[$key];
+
+                return new JsonMockResponse([], ['http_code' => 500]);
+            },
+        );
+
+        new BatchHttpClient($mockClient)
+            ->request([
+                'alpha' => new RequestConfig('GET', 'https://api.example.com/alpha', maxRetries: 2, throwOnError: false),
+                'beta' => new RequestConfig('GET', 'https://api.example.com/beta', maxRetries: 4, throwOnError: false),
+            ])
+            ->fetch();
+
+        expect($callCounts['alpha'])->toBe(3)
+            ->and($callCounts['beta'])->toBe(5);
+    });
 });
