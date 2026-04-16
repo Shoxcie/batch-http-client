@@ -110,3 +110,59 @@ describe('successful batch requests (2xx)', function (): void {
             ->and($results['put'])->toBe(['method' => 'PUT']);
     });
 });
+
+describe('mixed success/failure results', function (): void {
+    test('successful requests return data while failed return null', function (): void {
+        $mockClient = new MockHttpClient(
+            function (string $method, string $url): JsonMockResponse {
+                if (str_contains($url, '/failing')) {
+                    return new JsonMockResponse(['error' => 'server error'], ['http_code' => 500]);
+                }
+
+                return new JsonMockResponse(['url' => $url]);
+            },
+        );
+
+        $results = new BatchHttpClient($mockClient)
+            ->request([
+                'users' => new RequestConfig('GET', 'https://api.example.com/users', throwOnError: false),
+                'failing' => new RequestConfig('GET', 'https://api.example.com/failing', throwOnError: false),
+                'orders' => new RequestConfig('GET', 'https://api.example.com/orders', throwOnError: false),
+            ])
+            ->fetch();
+
+        expect($results['users'])->toBe(['url' => 'https://api.example.com/users'])
+            ->and($results['orders'])->toBe(['url' => 'https://api.example.com/orders'])
+            ->and($results['failing'])->toBeNull();
+    });
+
+    test('results contain all keys regardless of outcome', function (): void {
+        $mockClient = new MockHttpClient(
+            function (string $method, string $url): JsonMockResponse {
+                if (str_contains($url, '/not-found')) {
+                    return new JsonMockResponse([], ['http_code' => 404]);
+                }
+
+                if (str_contains($url, '/error')) {
+                    return new JsonMockResponse([], ['http_code' => 500]);
+                }
+
+                return new JsonMockResponse(['ok' => true]);
+            },
+        );
+
+        $configs = [
+            'ok-1' => new RequestConfig('GET', 'https://api.example.com/ok-1', throwOnError: false),
+            'not-found' => new RequestConfig('GET', 'https://api.example.com/not-found', throwOnError: false),
+            'ok-2' => new RequestConfig('GET', 'https://api.example.com/ok-2', throwOnError: false),
+            'error' => new RequestConfig('GET', 'https://api.example.com/error', throwOnError: false),
+        ];
+
+        $results = new BatchHttpClient($mockClient)
+            ->request($configs)
+            ->fetch();
+
+        expect(array_keys($results))->toEqualCanonicalizing(array_keys($configs));
+    });
+
+});
