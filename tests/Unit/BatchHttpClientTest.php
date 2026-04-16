@@ -913,3 +913,86 @@ describe('user_data preservation', function (): void {
         expect($captured)->toBeNull();
     });
 });
+
+describe('safety-net catch', function (): void {
+    test('rethrows JsonException on broken JSON with decodeJson true', function (): void {
+        $mockClient = new MockHttpClient([
+            new MockResponse('not json', ['response_headers' => ['content-type' => 'application/json']]),
+        ]);
+
+        expect(
+            fn(): array => new BatchHttpClient($mockClient)
+            ->request([
+                'api' => new RequestConfig('GET', 'https://api.example.com/api'),
+            ])
+            ->fetch(),
+        )->toThrow(\JsonException::class);
+    });
+
+    test('calls onFailure with the unexpected exception', function (): void {
+        $captured = [];
+        $thrown = null;
+
+        $mockClient = new MockHttpClient([
+            new MockResponse('not json', ['response_headers' => ['content-type' => 'application/json']]),
+        ]);
+
+        try {
+            new BatchHttpClient($mockClient)
+                ->request([
+                    'api' => new RequestConfig('GET', 'https://api.example.com/api'),
+                ])
+                ->onFailure(function (string $key, ResponseInterface $response, \Throwable $e) use (&$captured): void {
+                    $captured[] = ['key' => $key, 'exception' => $e];
+                })
+                ->fetch();
+        } catch (\JsonException $e) {
+            $thrown = $e;
+        }
+
+        expect($thrown)->toBeInstanceOf(\JsonException::class)
+            ->and($captured)->toHaveCount(1)
+            ->and($captured[0]['key'])->toBe('api')
+            ->and($captured[0]['exception'])->toBeInstanceOf(\JsonException::class);
+    });
+
+    test('rethrows exception thrown from onSuccess callback', function (): void {
+        $mockClient = new MockHttpClient([
+            new JsonMockResponse(['ok' => true]),
+        ]);
+
+        expect(
+            fn(): array => new BatchHttpClient($mockClient)
+                ->request([
+                    'api' => new RequestConfig('GET', 'https://api.example.com/api'),
+                ])
+                ->onSuccess(function (string $key, ResponseInterface $response): void {
+                    throw new \RuntimeException('boom');
+                })
+                ->fetch(),
+        )->toThrow(\RuntimeException::class, 'boom');
+    });
+
+    test('no retries are attempted when unexpected exception fires', function (): void {
+        $mockClient = new MockHttpClient([
+            new JsonMockResponse(['ok' => true]),
+            new JsonMockResponse(['ok' => true]),
+            new JsonMockResponse(['ok' => true]),
+        ]);
+
+        expect(
+            fn(): array => new BatchHttpClient($mockClient)
+                ->request([
+                    'a' => new RequestConfig('GET', 'https://api.example.com/a', maxRetries: 3),
+                    'b' => new RequestConfig('GET', 'https://api.example.com/b', maxRetries: 3),
+                    'c' => new RequestConfig('GET', 'https://api.example.com/c', maxRetries: 3),
+                ])
+                ->onSuccess(function (string $key, ResponseInterface $response): void {
+                    throw new \RuntimeException('boom');
+                })
+                ->fetch(),
+        )->toThrow(\RuntimeException::class);
+
+        expect($mockClient->getRequestsCount())->toBe(3);
+    });
+});

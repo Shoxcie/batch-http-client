@@ -84,7 +84,7 @@ composer cs:check            # PHP-CS-Fixer dry run (PER-CS 2.0)
 composer cs:fix              # Auto-fix code style
 composer rector              # Apply Rector refactorings
 composer rector:check        # Rector dry run
-composer quality             # Run analyse + cs:check + test in sequence
+composer quality             # Run analyse + rector:check + cs:check + test in sequence
 ```
 
 ## Code Standards
@@ -96,23 +96,23 @@ composer quality             # Run analyse + cs:check + test in sequence
 - PHPStan level 10 with strict rules and bleeding edge — no baseline, fix all errors
 - When adding dependencies, use `composer require package/name` without version constraints — let Composer resolve versions
 
-## TODO: Tests
+## Tests
 
-Write comprehensive unit tests using `MockHttpClient` / `MockResponse` / `JsonMockResponse`:
+Unit tests in `tests/Unit/BatchHttpClientTest.php` using `MockHttpClient` / `MockResponse` / `JsonMockResponse`, grouped by `describe` blocks:
 
-- [x] Successful batch requests (2xx) — verify results array matches input keys
-- [x] Mixed success/failure results — some 2xx, some errors
-- [x] Retry behavior — verify retry count
-- [x] `throwOnError: true` — exception thrown after retries exhausted, all in-flight cancelled
-- [x] `throwOnError: false` — failed requests return `null`
-- [x] Transport exception handling — DNS failure, connection timeout
-- [x] `retryOnTransportException: true` vs `false`
-- [x] `onSuccess` / `onRetry` / `onFailure` callbacks — verify they receive correct arguments
-- [x] `decodeJson: true` vs `false` — `toArray()` vs `getContent()`
-- [x] `retryOptions` merging — verify `array_replace_recursive` behavior on retries
-- [x] `retryOptions` as Closure — verify dynamic retry options based on attempt/exception
-- [x] `user_data` preservation — caller's original user_data accessible after batch processing
-- [ ] Safety-net catch — outer `catch(Throwable)` handles unexpected exceptions (e.g. from callbacks, broken JSON with `decodeJson: true`)
+- Successful batch requests (2xx) — verify results array matches input keys
+- Mixed success/failure results — some 2xx, some errors
+- Retry behavior — verify retry count
+- `throwOnError: true` — exception thrown after retries exhausted, all in-flight cancelled
+- `throwOnError: false` — failed requests return `null`
+- Transport exception handling — DNS failure, connection timeout
+- `retryOnTransportException: true` vs `false`
+- `onSuccess` / `onRetry` / `onFailure` callbacks — verify they receive correct arguments
+- `decodeJson: true` vs `false` — `toArray()` vs `getContent()`
+- `retryOptions` merging — verify `array_replace_recursive` behavior on retries
+- `retryOptions` as Closure — verify dynamic retry options based on attempt/exception
+- `user_data` preservation — caller's original user_data accessible after batch processing
+- Safety-net catch — outer `catch(Throwable)` handles unexpected exceptions (e.g. from callbacks, broken JSON with `decodeJson: true`)
 
 ## TODO: Breaking changes (next major)
 
