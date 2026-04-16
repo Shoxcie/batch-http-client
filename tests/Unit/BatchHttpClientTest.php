@@ -700,3 +700,107 @@ describe('retryOptions merging', function (): void {
         expect($capturedHeaders[1]['authorization'])->toBe(['Authorization: Bearer token']);
     });
 });
+
+describe('retryOptions as Closure', function (): void {
+    test('closure receives attempt number and exception', function (): void {
+        $captured = [];
+        $callCount = 0;
+
+        $mockClient = new MockHttpClient(
+            function () use (&$callCount): JsonMockResponse {
+                ++$callCount;
+
+                if ($callCount <= 2) {
+                    return new JsonMockResponse([], ['http_code' => 500]);
+                }
+
+                return new JsonMockResponse(['ok' => true]);
+            },
+        );
+
+        new BatchHttpClient($mockClient)
+            ->request([
+                'api' => new RequestConfig(
+                    'GET',
+                    'https://api.example.com/api',
+                    retryOptions: function (int $attempt, \Throwable $e) use (&$captured): array {
+                        $captured[] = ['attempt' => $attempt, 'exception' => $e];
+
+                        return [];
+                    },
+                    maxRetries: 2,
+                ),
+            ])
+            ->fetch();
+
+        expect($captured)->toHaveCount(2)
+            ->and($captured[0]['attempt'])->toBe(1)
+            ->and($captured[0]['exception'])->toBeInstanceOf(ExceptionInterface::class)
+            ->and($captured[1]['attempt'])->toBe(2)
+            ->and($captured[1]['exception'])->toBeInstanceOf(ExceptionInterface::class);
+    });
+
+    test('closure return value is used as retry options', function (): void {
+        $capturedHeaders = [];
+        $callCount = 0;
+
+        $mockClient = new MockHttpClient(
+            function (string $method, string $url, array $options) use (&$capturedHeaders, &$callCount): JsonMockResponse {
+                ++$callCount;
+                $capturedHeaders[] = $options['normalized_headers'];
+
+                if ($callCount === 1) {
+                    return new JsonMockResponse([], ['http_code' => 500]);
+                }
+
+                return new JsonMockResponse(['ok' => true]);
+            },
+        );
+
+        new BatchHttpClient($mockClient)
+            ->request([
+                'api' => new RequestConfig(
+                    'GET',
+                    'https://api.example.com/api',
+                    retryOptions: fn(int $attempt, \Throwable $e): array => ['headers' => ['X-Attempt' => '1']],
+                    maxRetries: 1,
+                ),
+            ])
+            ->fetch();
+
+        expect($capturedHeaders[0])->not->toHaveKey('x-attempt')
+            ->and($capturedHeaders[1]['x-attempt'])->toBe(['X-Attempt: 1']);
+    });
+
+    test('closure can return different options per attempt', function (): void {
+        $capturedHeaders = [];
+        $callCount = 0;
+
+        $mockClient = new MockHttpClient(
+            function (string $method, string $url, array $options) use (&$capturedHeaders, &$callCount): JsonMockResponse {
+                ++$callCount;
+                $capturedHeaders[] = $options['normalized_headers'];
+
+                if ($callCount <= 2) {
+                    return new JsonMockResponse([], ['http_code' => 500]);
+                }
+
+                return new JsonMockResponse(['ok' => true]);
+            },
+        );
+
+        new BatchHttpClient($mockClient)
+            ->request([
+                'api' => new RequestConfig(
+                    'GET',
+                    'https://api.example.com/api',
+                    retryOptions: fn(int $attempt, \Throwable $e): array => ['headers' => ['X-Attempt' => (string) $attempt]],
+                    maxRetries: 2,
+                ),
+            ])
+            ->fetch();
+
+        expect($capturedHeaders[1]['x-attempt'])->toBe(['X-Attempt: 1'])
+            ->and($capturedHeaders[2]['x-attempt'])->toBe(['X-Attempt: 2']);
+    });
+});
