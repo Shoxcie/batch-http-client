@@ -100,7 +100,7 @@ composer quality             # Run analyse + cs:check + test in sequence
 
 Write comprehensive unit tests using `MockHttpClient` / `MockResponse` / `JsonMockResponse`:
 
-- [ ] Successful batch requests (2xx) — verify results array matches input keys
+- [x] Successful batch requests (2xx) — verify results array matches input keys
 - [ ] Mixed success/failure results — some 2xx, some errors
 - [ ] Retry behavior — verify retry count
 - [ ] `throwOnError: true` — exception thrown after retries exhausted, all in-flight cancelled
