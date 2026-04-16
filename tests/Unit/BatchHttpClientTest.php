@@ -3,6 +3,9 @@
 declare(strict_types=1);
 
 use Shoxcie\BatchHttpClient\BatchHttpClient;
+
+use function Shoxcie\BatchHttpClient\getUserData;
+
 use Shoxcie\BatchHttpClient\RequestConfig;
 use Symfony\Component\HttpClient\Exception\ServerException;
 use Symfony\Component\HttpClient\Exception\TransportException;
@@ -802,5 +805,111 @@ describe('retryOptions as Closure', function (): void {
 
         expect($capturedHeaders[1]['x-attempt'])->toBe(['X-Attempt: 1'])
             ->and($capturedHeaders[2]['x-attempt'])->toBe(['X-Attempt: 2']);
+    });
+});
+
+describe('user_data preservation', function (): void {
+    test('caller user_data accessible in onSuccess callback', function (): void {
+        $captured = null;
+
+        $mockClient = new MockHttpClient([
+            new JsonMockResponse(['ok' => true]),
+        ]);
+
+        new BatchHttpClient($mockClient)
+            ->request([
+                'api' => new RequestConfig(
+                    'GET',
+                    'https://api.example.com/api',
+                    options: ['user_data' => ['my' => 'data']],
+                ),
+            ])
+            ->onSuccess(function (string $key, ResponseInterface $response) use (&$captured): void {
+                $captured = getUserData($response);
+            })
+            ->fetch();
+
+        expect($captured)->toBe(['my' => 'data']);
+    });
+
+    test('caller user_data accessible in onFailure callback', function (): void {
+        $captured = null;
+
+        $mockClient = new MockHttpClient([
+            new JsonMockResponse([], ['http_code' => 500]),
+        ]);
+
+        new BatchHttpClient($mockClient)
+            ->request([
+                'api' => new RequestConfig(
+                    'GET',
+                    'https://api.example.com/api',
+                    options: ['user_data' => 'fail-token'],
+                    throwOnError: false,
+                ),
+            ])
+            ->onFailure(function (string $key, ResponseInterface $response, \Throwable $e) use (&$captured): void {
+                $captured = getUserData($response);
+            })
+            ->fetch();
+
+        expect($captured)->toBe('fail-token');
+    });
+
+    test('caller user_data preserved across retries', function (): void {
+        $onRetryCaptured = null;
+        $onSuccessCaptured = null;
+        $callCount = 0;
+
+        $mockClient = new MockHttpClient(
+            function () use (&$callCount): JsonMockResponse {
+                ++$callCount;
+
+                if ($callCount === 1) {
+                    return new JsonMockResponse([], ['http_code' => 500]);
+                }
+
+                return new JsonMockResponse(['ok' => true]);
+            },
+        );
+
+        new BatchHttpClient($mockClient)
+            ->request([
+                'api' => new RequestConfig(
+                    'GET',
+                    'https://api.example.com/api',
+                    options: ['user_data' => 42],
+                    maxRetries: 1,
+                ),
+            ])
+            ->onRetry(function (string $key, int $attempt, ResponseInterface $failedResponse, ExceptionInterface $e, ResponseInterface $retryResponse) use (&$onRetryCaptured): void {
+                $onRetryCaptured = getUserData($retryResponse);
+            })
+            ->onSuccess(function (string $key, ResponseInterface $response) use (&$onSuccessCaptured): void {
+                $onSuccessCaptured = getUserData($response);
+            })
+            ->fetch();
+
+        expect($onRetryCaptured)->toBe(42)
+            ->and($onSuccessCaptured)->toBe(42);
+    });
+
+    test('null user_data when caller provides none', function (): void {
+        $captured = 'sentinel';
+
+        $mockClient = new MockHttpClient([
+            new JsonMockResponse(['ok' => true]),
+        ]);
+
+        new BatchHttpClient($mockClient)
+            ->request([
+                'api' => new RequestConfig('GET', 'https://api.example.com/api'),
+            ])
+            ->onSuccess(function (string $key, ResponseInterface $response) use (&$captured): void {
+                $captured = getUserData($response);
+            })
+            ->fetch();
+
+        expect($captured)->toBeNull();
     });
 });

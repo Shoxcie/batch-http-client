@@ -111,5 +111,9 @@ Write comprehensive unit tests using `MockHttpClient` / `MockResponse` / `JsonMo
 - [x] `decodeJson: true` vs `false` — `toArray()` vs `getContent()`
 - [x] `retryOptions` merging — verify `array_replace_recursive` behavior on retries
 - [x] `retryOptions` as Closure — verify dynamic retry options based on attempt/exception
-- [ ] `user_data` preservation — caller's original user_data accessible after batch processing
+- [x] `user_data` preservation — caller's original user_data accessible after batch processing
 - [ ] Safety-net catch — outer `catch(Throwable)` handles unexpected exceptions (e.g. from callbacks, broken JSON with `decodeJson: true`)
+
+## TODO: Breaking changes (next major)
+
+- [ ] Remove caller `user_data` preservation. Internally we wrap caller's `user_data` as `[$key, $originalUserData]` and expose a `getUserData()` helper to unwrap it — this is unintuitive. In a future major release: keep using `user_data` internally (store the key directly, not a wrapper array), but throw an exception if the caller passes `user_data` in `options`. Drop the `getUserData()` helper.
