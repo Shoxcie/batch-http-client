@@ -9,6 +9,8 @@ use Symfony\Component\HttpClient\Exception\TransportException;
 use Symfony\Component\HttpClient\MockHttpClient;
 use Symfony\Component\HttpClient\Response\JsonMockResponse;
 use Symfony\Component\HttpClient\Response\MockResponse;
+use Symfony\Contracts\HttpClient\Exception\ExceptionInterface;
+use Symfony\Contracts\HttpClient\ResponseInterface;
 
 describe('successful batch requests (2xx)', function (): void {
     test('single request returns result with matching key', function (): void {
@@ -456,5 +458,93 @@ describe('retryOnTransportException', function (): void {
 
         expect($results['api'])->toBeNull()
             ->and($mockClient->getRequestsCount())->toBe(3);
+    });
+});
+
+describe('callbacks', function (): void {
+    test('onSuccess receives key and response', function (): void {
+        $captured = [];
+
+        $mockClient = new MockHttpClient([
+            new JsonMockResponse(['id' => 1]),
+            new JsonMockResponse(['id' => 2]),
+        ]);
+
+        new BatchHttpClient($mockClient)
+            ->request([
+                'users' => new RequestConfig('GET', 'https://api.example.com/users'),
+                'orders' => new RequestConfig('GET', 'https://api.example.com/orders'),
+            ])
+            ->onSuccess(function (string $key, ResponseInterface $response) use (&$captured): void {
+                $captured[] = ['key' => $key, 'response' => $response];
+            })
+            ->fetch();
+
+        expect($captured)->toHaveCount(2)
+            ->and($captured[0]['key'])->toBe('users')
+            ->and($captured[0]['response'])->toBeInstanceOf(ResponseInterface::class)
+            ->and($captured[1]['key'])->toBe('orders')
+            ->and($captured[1]['response'])->toBeInstanceOf(ResponseInterface::class);
+    });
+
+    test('onRetry receives key, attempt, failed response, exception, and retry response', function (): void {
+        $captured = [];
+        $callCount = 0;
+
+        $mockClient = new MockHttpClient(
+            function () use (&$callCount): JsonMockResponse {
+                ++$callCount;
+
+                if ($callCount === 1) {
+                    return new JsonMockResponse([], ['http_code' => 500]);
+                }
+
+                return new JsonMockResponse(['ok' => true]);
+            },
+        );
+
+        new BatchHttpClient($mockClient)
+            ->request([
+                'api' => new RequestConfig('GET', 'https://api.example.com/api', maxRetries: 2),
+            ])
+            ->onRetry(function (string $key, int $attempt, ResponseInterface $failedResponse, ExceptionInterface $e, ResponseInterface $retryResponse) use (&$captured): void {
+                $captured[] = [
+                    'key' => $key,
+                    'attempt' => $attempt,
+                    'failedResponse' => $failedResponse,
+                    'exception' => $e,
+                    'retryResponse' => $retryResponse,
+                ];
+            })
+            ->fetch();
+
+        expect($captured)->toHaveCount(1)
+            ->and($captured[0]['key'])->toBe('api')
+            ->and($captured[0]['attempt'])->toBe(1)
+            ->and($captured[0]['failedResponse'])->toBeInstanceOf(ResponseInterface::class)
+            ->and($captured[0]['exception'])->toBeInstanceOf(ExceptionInterface::class)
+            ->and($captured[0]['retryResponse'])->toBeInstanceOf(ResponseInterface::class);
+    });
+
+    test('onFailure receives key, response, and exception', function (): void {
+        $captured = [];
+
+        $mockClient = new MockHttpClient([
+            new JsonMockResponse([], ['http_code' => 500]),
+        ]);
+
+        new BatchHttpClient($mockClient)
+            ->request([
+                'api' => new RequestConfig('GET', 'https://api.example.com/api', throwOnError: false),
+            ])
+            ->onFailure(function (string $key, ResponseInterface $response, \Throwable $e) use (&$captured): void {
+                $captured[] = ['key' => $key, 'response' => $response, 'exception' => $e];
+            })
+            ->fetch();
+
+        expect($captured)->toHaveCount(1)
+            ->and($captured[0]['key'])->toBe('api')
+            ->and($captured[0]['response'])->toBeInstanceOf(ResponseInterface::class)
+            ->and($captured[0]['exception'])->toBeInstanceOf(\Throwable::class);
     });
 });
