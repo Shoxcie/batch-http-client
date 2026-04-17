@@ -7,6 +7,7 @@ use Shoxcie\BatchHttpClient\BatchHttpClient;
 use function Shoxcie\BatchHttpClient\getUserData;
 
 use Shoxcie\BatchHttpClient\RequestConfig;
+use Shoxcie\BatchHttpClient\Tests\Support\CapturingHttpClient;
 use Symfony\Component\HttpClient\Exception\ServerException;
 use Symfony\Component\HttpClient\Exception\TransportException;
 use Symfony\Component\HttpClient\MockHttpClient;
@@ -31,7 +32,7 @@ describe('successful batch requests (2xx)', function (): void {
             ->toHaveCount(1)
             ->toHaveKey('users')
             ->and($results['users'])
-                ->toBe(['id' => 1, 'name' => 'Alice']);
+            ->toBe(['id' => 1, 'name' => 'Alice']);
     });
 
     test('multiple requests return results with matching keys', function (): void {
@@ -260,13 +261,13 @@ describe('throwOnError: true', function (): void {
 
         expect(
             fn(): array => new BatchHttpClient($mockClient)
-            ->request([
-                'api' => new RequestConfig('GET', 'https://api.example.com/api', maxRetries: 2),
-            ])
-            ->fetch(),
-        )->toThrow(ServerException::class);
+                ->request([
+                    'api' => new RequestConfig('GET', 'https://api.example.com/api', maxRetries: 2),
+                ])
+                ->fetch(),
+        )->toThrow(ServerException::class)
+            ->and($mockClient->getRequestsCount())->toBe(3);
 
-        expect($mockClient->getRequestsCount())->toBe(3);
     });
 
     test('throws exception immediately with no retries', function (): void {
@@ -276,16 +277,34 @@ describe('throwOnError: true', function (): void {
 
         expect(
             fn(): array => new BatchHttpClient($mockClient)
-            ->request([
-                'api' => new RequestConfig('GET', 'https://api.example.com/api'),
-            ])
-            ->fetch(),
-        )->toThrow(ServerException::class);
-
-        expect($mockClient->getRequestsCount())->toBe(1);
+                ->request([
+                    'api' => new RequestConfig('GET', 'https://api.example.com/api'),
+                ])
+                ->fetch(),
+        )->toThrow(ServerException::class)
+            ->and($mockClient->getRequestsCount())->toBe(1);
     });
 
-    test('cancels all in-flight requests on failure', function (): void {})->todo();
+    test('cancels all in-flight requests on failure', function (): void {
+        $capturing = new CapturingHttpClient(new MockHttpClient(
+            fn(string $method, string $url): JsonMockResponse => str_contains($url, '/failing')
+                ? new JsonMockResponse([], ['http_code' => 500])
+                : new JsonMockResponse(['ok' => true]),
+        ));
+
+        expect(
+            fn(): array => new BatchHttpClient($capturing)
+                ->request([
+                    'failing' => new RequestConfig('GET', 'https://api.example.com/failing'),
+                    'alpha' => new RequestConfig('GET', 'https://api.example.com/alpha'),
+                    'beta' => new RequestConfig('GET', 'https://api.example.com/beta'),
+                ])
+                ->fetch(),
+        )->toThrow(ServerException::class)
+            ->and($capturing->getResponses())->toHaveCount(3)
+            ->and($capturing->getResponse("alpha")->getInfo('canceled'))->toBeTrue()
+            ->and($capturing->getResponse("beta")->getInfo('canceled'))->toBeTrue();
+    });
 });
 
 describe('throwOnError: false', function (): void {
@@ -394,10 +413,10 @@ describe('transport exception handling', function (): void {
 
         expect(
             fn(): array => new BatchHttpClient($mockClient)
-            ->request([
-                'api' => new RequestConfig('GET', 'https://api.example.com/api'),
-            ])
-            ->fetch(),
+                ->request([
+                    'api' => new RequestConfig('GET', 'https://api.example.com/api'),
+                ])
+                ->fetch(),
         )->toThrow(TransportException::class);
     });
 
@@ -922,10 +941,10 @@ describe('safety-net catch', function (): void {
 
         expect(
             fn(): array => new BatchHttpClient($mockClient)
-            ->request([
-                'api' => new RequestConfig('GET', 'https://api.example.com/api'),
-            ])
-            ->fetch(),
+                ->request([
+                    'api' => new RequestConfig('GET', 'https://api.example.com/api'),
+                ])
+                ->fetch(),
         )->toThrow(\JsonException::class);
     });
 
