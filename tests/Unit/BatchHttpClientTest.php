@@ -7,7 +7,7 @@ use Shoxcie\BatchHttpClient\BatchHttpClient;
 use function Shoxcie\BatchHttpClient\getUserData;
 
 use Shoxcie\BatchHttpClient\RequestConfig;
-use Shoxcie\BatchHttpClient\Tests\CapturingHttpClient;
+use Shoxcie\BatchHttpClient\Tests\Support\CapturingHttpClient;
 use Symfony\Component\HttpClient\Exception\ServerException;
 use Symfony\Component\HttpClient\Exception\TransportException;
 use Symfony\Component\HttpClient\MockHttpClient;

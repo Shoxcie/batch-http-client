@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Shoxcie\BatchHttpClient\Tests;
+namespace Shoxcie\BatchHttpClient\Tests\Support;
 
 use Symfony\Contracts\HttpClient\HttpClientInterface;
 use Symfony\Contracts\HttpClient\ResponseInterface;
