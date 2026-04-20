@@ -10,7 +10,7 @@ jobs:
         name: P${{ matrix.php }} - ${{ matrix.dependency-version }} - ${{ matrix.os }}
         runs-on: ${{ matrix.os }}
         strategy:
-            fail-fast: true
+            fail-fast: false
             matrix:
                 os: [ ubuntu-latest ]
                 php: [ 8.4, 8.5 ]
