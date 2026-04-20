@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Shoxcie\BatchHttpClient;
 
 use Closure;
+use InvalidArgumentException;
 use Symfony\Component\HttpClient\HttpClient;
 use Symfony\Contracts\HttpClient\Exception\ExceptionInterface;
 use Symfony\Contracts\HttpClient\Exception\HttpExceptionInterface;
@@ -46,6 +47,8 @@ final class BatchHttpClient
 
     /**
      * @param array<string, RequestConfig> $configs
+     *
+     * @throws InvalidArgumentException if any config's `options` contains the reserved `user_data` key
      */
     public function request(array $configs): self
     {
@@ -58,9 +61,9 @@ final class BatchHttpClient
         foreach ($configs as $key => $config) {
             $this->retriesCount[$key] = 0;
 
-            $userData = $config->options['user_data'] ?? null;
+            $this->assertNoUserDataOption($config->options, $key);
 
-            $options = ['user_data' => [$key, $userData]] + $config->options;
+            $options = ['user_data' => $key] + $config->options;
 
             $this->responses[$key] = $this->httpClient->request(
                 $config->method,
@@ -98,6 +101,9 @@ final class BatchHttpClient
 
     /**
      * @return array<string, mixed>
+     *
+     * @throws InvalidArgumentException if `retryOptions` contains the reserved `user_data` key
+     * @throws ExceptionInterface       if a `throwOnError` request fails after exhausting retries
      */
     public function fetch(): array
     {
@@ -193,12 +199,13 @@ final class BatchHttpClient
 
     private function getKey(ResponseInterface $response): string
     {
-        /** @var array{0: string, 1: mixed} */
-        $userData = $response->getInfo('user_data');
-
-        return $userData[0];
+        /** @var string */
+        return $response->getInfo('user_data');
     }
 
+    /**
+     * @throws InvalidArgumentException if `$config->retryOptions` contains the reserved `user_data` key
+     */
     private function retry(string $key, RequestConfig $config, ExceptionInterface $e): ResponseInterface
     {
         ++$this->retriesCount[$key];
@@ -210,14 +217,33 @@ final class BatchHttpClient
             $retryOptions = $config->retryOptions;
         }
 
-        $userData = $retryOptions['user_data'] ?? $config->options['user_data'] ?? null;
+        $this->assertNoUserDataOption($retryOptions, $key);
 
-        $options = array_replace_recursive($config->options, ['user_data' => [$key, $userData]] + $retryOptions);
+        $options = array_replace_recursive($config->options, ['user_data' => $key] + $retryOptions);
 
         return $this->responses[$key] = $this->httpClient->request(
             $config->method,
             $config->url,
             $options,
+        );
+    }
+
+    /**
+     * @param array<string, mixed> $options
+     *
+     * @throws InvalidArgumentException if `$options` contains the reserved `user_data` key
+     */
+    private function assertNoUserDataOption(array $options, string $key): void
+    {
+        if (!isset($options['user_data'])) {
+            return;
+        }
+
+        $this->cancelAll();
+
+        throw new InvalidArgumentException(
+            "RequestConfig options must not contain 'user_data' — it's reserved for internal use."
+            . " Use the batch key (got key: '{$key}') to correlate responses instead.",
         );
     }
 
