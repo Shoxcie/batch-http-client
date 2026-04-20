@@ -8,7 +8,7 @@ use Shoxcie\BatchHttpClient\BatchHttpClient;
 use Shoxcie\BatchHttpClient\RequestConfig;
 use Symfony\Contracts\HttpClient\Exception\ExceptionInterface;
 use Symfony\Contracts\HttpClient\ResponseInterface;
-use function Shoxcie\BatchHttpClient\{getContent, getHeaders, getStatusCode, getTotalTime, getUrl};
+use function Shoxcie\BatchHttpClient\{get_content, get_headers, get_status_code, get_total_time, get_url};
 
 function minify(string $text): string {
     return preg_replace('/\s+/', ' ', trim($text));
@@ -63,13 +63,13 @@ function logSuccess(string $key, ResponseInterface $response): void
     simpleLog(
         'SUCCESS',
         $key,
-        getUrl($response),
-        getTotalTime($response),
+        get_url($response),
+        get_total_time($response),
         null,
         null,
-        getStatusCode($response),
-        getHeaders($response),
-        getContent($response),
+        get_status_code($response),
+        get_headers($response),
+        get_content($response),
     );
 }
 
@@ -78,13 +78,13 @@ function logRetry(string $key, int $attempt, ResponseInterface $response, Except
     simpleLog(
         'RETRY',
         $key,
-        getUrl($response),
-        getTotalTime($response),
+        get_url($response),
+        get_total_time($response),
         $e->getMessage(),
         $attempt,
-        getStatusCode($response),
-        getHeaders($response),
-        getContent($response),
+        get_status_code($response),
+        get_headers($response),
+        get_content($response),
     );
 }
 
@@ -93,13 +93,13 @@ function logFailure(string $key, ResponseInterface $response, Throwable $e): voi
     simpleLog(
         'FAILURE',
         $key,
-        getUrl($response),
-        getTotalTime($response),
+        get_url($response),
+        get_total_time($response),
         $e->getMessage(),
         null,
-        getStatusCode($response),
-        getHeaders($response),
-        getContent($response),
+        get_status_code($response),
+        get_headers($response),
+        get_content($response),
     );
 }
 
