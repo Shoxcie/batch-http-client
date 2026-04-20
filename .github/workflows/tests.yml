@@ -1,0 +1,35 @@
+name: Tests
+
+on: [ push, pull_request ]
+
+permissions:
+    contents: read
+
+jobs:
+    test:
+        name: P${{ matrix.php }} - ${{ matrix.dependency-version }} - ${{ matrix.os }}
+        runs-on: ${{ matrix.os }}
+        timeout-minutes: 15
+        strategy:
+            fail-fast: false
+            matrix:
+                os: [ ubuntu-latest ]
+                php: [ 8.4, 8.5 ]
+                dependency-version: [ prefer-lowest, prefer-stable ]
+
+        steps:
+            -   name: Checkout code
+                uses: actions/checkout@v6
+
+            -   name: Setup PHP
+                uses: shivammathur/setup-php@v2
+                with:
+                    php-version: ${{ matrix.php }}
+                    extensions: dom, curl, libxml, mbstring, zip, pcntl, iconv
+                    coverage: none
+
+            -   name: Install dependencies
+                run: composer update --${{ matrix.dependency-version }} --prefer-dist --no-interaction
+
+            -   name: Run tests
+                run: vendor/bin/pest --colors=always
