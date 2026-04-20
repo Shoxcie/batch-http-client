@@ -151,6 +151,10 @@ $client = new BatchHttpClient($httpClient);
 > [!IMPORTANT]
 > The `user_data` option is reserved for internal key correlation — passing it in `options` or `retryOptions` throws `InvalidArgumentException`.
 
+## Upgrading
+
+See [UPGRADE-2.0.md](UPGRADE-2.0.md) for the `1.x` → `2.x` migration guide.
+
 ## License
 
 MIT — see [LICENSE](LICENSE) for details.
