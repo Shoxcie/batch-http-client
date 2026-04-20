@@ -4,19 +4,9 @@ declare(strict_types=1);
 
 namespace Shoxcie\BatchHttpClient;
 
-use Deprecated;
 use Symfony\Contracts\HttpClient\Exception\ExceptionInterface;
 use Symfony\Contracts\HttpClient\Exception\TransportExceptionInterface;
 use Symfony\Contracts\HttpClient\ResponseInterface;
-
-#[Deprecated(message: "passing custom user_data won't be allowed")]
-function getUserData(ResponseInterface $response): mixed
-{
-    /** @var array{0: string, 1: mixed} */
-    $userData = $response->getInfo('user_data');
-
-    return $userData[1];
-}
 
 function get_url(ResponseInterface $response): string
 {

@@ -148,6 +148,9 @@ $client = new BatchHttpClient($httpClient);
 | `maxRetries` | `int` | `0` | Maximum retry attempts |
 | `retryOnTransportException` | `bool` | `true` | Retry on transport errors (timeouts, DNS) |
 
+> [!IMPORTANT]
+> The `user_data` option is reserved for internal key correlation — passing it in `options` or `retryOptions` throws `InvalidArgumentException`.
+
 ## License
 
 MIT — see [LICENSE](LICENSE) for details.
