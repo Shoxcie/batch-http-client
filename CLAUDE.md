@@ -41,7 +41,7 @@ $results = $client
 
 ### `request(array<string, RequestConfig>)` — fire all requests, return `static`
 
-Fires all HTTP requests immediately (Symfony HttpClient is async by default). Stores responses and config internally. Returns `$this` for fluent usage. Preserves caller's `user_data` by wrapping as `[$internalKey, $originalUserData]`.
+Fires all HTTP requests immediately (Symfony HttpClient is async by default). Stores responses and config internally. Returns `$this` for fluent usage. Throws `InvalidArgumentException` if `user_data` is present in `options` — the key is reserved for internal correlation.
 
 ### `fetch()` — wait for responses, handle retries, return results
 
@@ -111,9 +111,5 @@ Unit tests in `tests/Unit/BatchHttpClientTest.php` using `MockHttpClient` / `Moc
 - `decodeJson: true` vs `false` — `toArray()` vs `getContent()`
 - `retryOptions` merging — verify `array_replace_recursive` behavior on retries
 - `retryOptions` as Closure — verify dynamic retry options based on attempt/exception
-- `user_data` preservation — caller's original user_data accessible after batch processing
+- `user_data` rejection — throws `InvalidArgumentException` when `options` or a `retryOptions` Closure contains `user_data`
 - Safety-net catch — outer `catch(Throwable)` handles unexpected exceptions (e.g. from callbacks, broken JSON with `decodeJson: true`)
-
-## TODO: Breaking changes (next major)
-
-- [ ] Remove caller `user_data` preservation. Internally we wrap caller's `user_data` as `[$key, $originalUserData]` and expose a `getUserData()` helper to unwrap it — this is unintuitive. In a future major release: keep using `user_data` internally (store the key directly, not a wrapper array), but throw an exception if the caller passes `user_data` in `options`. Drop the `getUserData()` helper.
