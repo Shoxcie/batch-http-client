@@ -8,7 +8,7 @@ use Shoxcie\BatchHttpClient\BatchHttpClient;
 use Shoxcie\BatchHttpClient\RequestConfig;
 use Symfony\Contracts\HttpClient\Exception\ExceptionInterface;
 use Symfony\Contracts\HttpClient\ResponseInterface;
-use function Shoxcie\BatchHttpClient\{getContent, getHeaders, getStatusCode, getTotalTime, getUrl};
+use function Shoxcie\BatchHttpClient\{get_content, get_headers, get_status_code, get_total_time, get_url};
 
 function minify(string $text): string {
     return preg_replace('/\s+/', ' ', trim($text));
@@ -63,11 +63,11 @@ function logSuccess(string $key, ResponseInterface $response): void
     simpleLog(
         prefix: 'SUCCESS',
         key: $key,
-        url: getUrl($response),
-        duration: getTotalTime($response),
-        statusCode: getStatusCode($response),
-        headers: getHeaders($response),
-        body: getContent($response),
+        url: get_url($response),
+        duration: get_total_time($response),
+        statusCode: get_status_code($response),
+        headers: get_headers($response),
+        body: get_content($response),
     );
 }
 
@@ -76,13 +76,13 @@ function logRetry(string $key, int $attempt, ResponseInterface $response, Except
     simpleLog(
         prefix: 'RETRY',
         key: $key,
-        url: getUrl($response),
-        duration: getTotalTime($response),
+        url: get_url($response),
+        duration: get_total_time($response),
         attempt: $attempt,
         exceptionMessage: $e->getMessage(),
-        statusCode: getStatusCode($response),
-        headers: getHeaders($response),
-        body: getContent($response),
+        statusCode: get_status_code($response),
+        headers: get_headers($response),
+        body: get_content($response),
     );
 }
 
@@ -91,12 +91,12 @@ function logFailure(string $key, ResponseInterface $response, Throwable $e): voi
     simpleLog(
         prefix: 'FAILURE',
         key: $key,
-        url: getUrl($response),
-        duration: getTotalTime($response),
+        url: get_url($response),
+        duration: get_total_time($response),
         exceptionMessage: $e->getMessage(),
-        statusCode: getStatusCode($response),
-        headers: getHeaders($response),
-        body: getContent($response),
+        statusCode: get_status_code($response),
+        headers: get_headers($response),
+        body: get_content($response),
     );
 }
 
