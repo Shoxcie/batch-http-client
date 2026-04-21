@@ -17,7 +17,9 @@ function get_url(ResponseInterface $response): string
 function get_total_time(ResponseInterface $response): float
 {
     /** @var float */
-    return $response->getInfo('total_time');
+    $totalTime = $response->getInfo('total_time') ?? 0.0;
+
+    return $totalTime;
 }
 
 function get_status_code(ResponseInterface $response, bool $throw = false): int
