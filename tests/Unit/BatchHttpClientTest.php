@@ -552,6 +552,25 @@ describe('callbacks', function (): void {
             ->and($captured[0]['response'])->toBeInstanceOf(ResponseInterface::class)
             ->and($captured[0]['exception'])->toBeInstanceOf(\Throwable::class);
     });
+
+    test('onFailure is invoked exactly once when throwOnError rethrows', function (): void {
+        $calls = 0;
+        $mockClient = new MockHttpClient(
+            fn(): JsonMockResponse => new JsonMockResponse([], ['http_code' => 500]),
+        );
+
+        try {
+            (new BatchHttpClient($mockClient))
+                ->request(['api' => new RequestConfig('GET', 'https://api.example.com/api')])
+                ->onFailure(function () use (&$calls): void {
+                    ++$calls;
+                })
+                ->fetch();
+        } catch (ServerException $e) {
+        }
+
+        expect($calls)->toBe(1);
+    });
 });
 
 describe('decodeJson', function (): void {

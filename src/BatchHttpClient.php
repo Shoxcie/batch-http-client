@@ -103,7 +103,7 @@ final class BatchHttpClient
      * @return array<string, mixed>
      *
      * @throws InvalidArgumentException if `retryOptions` contains the reserved `user_data` key
-     * @throws ExceptionInterface       if a `throwOnError` request fails after exhausting retries
+     * @throws TransportExceptionInterface|HttpExceptionInterface if a `throwOnError` request fails after exhausting retries
      */
     public function fetch(): array
     {
@@ -137,6 +137,11 @@ final class BatchHttpClient
                     }
                 }
             }
+
+        } catch (TransportExceptionInterface | HttpExceptionInterface $e) {
+            $this->cancelAll();
+
+            throw $e;
 
         } catch (Throwable $e) {
             $this->cancelAll();
@@ -187,8 +192,6 @@ final class BatchHttpClient
         }
 
         if ($config->throwOnError) {
-            $this->cancelAll();
-
             throw $e;
         }
 
