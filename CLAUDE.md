@@ -29,7 +29,7 @@ $results = $client
 
 ### Classes
 
-- `BatchHttpClient` — stateful, has `request()`, `onSuccess()`, `onRetry()`, `onExhausted()`, `onAbort()`, and `fetch()`. Also exposes the deprecated `onFailure()` (fallback for both new callbacks; will be removed in `3.0`). Accepts optional `HttpClientInterface` in constructor (defaults to `HttpClient::create()`).
+- `BatchHttpClient` — stateful, has `request()`, `onSuccess()`, `onRetry()`, `onExhausted()`, `onAbort()`, and `fetch()`. Accepts optional `HttpClientInterface` in constructor (defaults to `HttpClient::create()`).
 - `RequestConfig` — readonly DTO for per-request params. Constructor with defaults:
   - `method` (string)
   - `url` (string)
@@ -50,7 +50,7 @@ Fires all HTTP requests immediately (Symfony HttpClient is async by default). St
 - `isFirst`: acknowledges status code via `$response->getStatusCode()` to prevent generator auto-throw
 - `isLast`: reads response body, stores result
 - Non-2xx and transport errors caught via `catch (TransportExceptionInterface | HttpExceptionInterface)`
-- Outer `try/catch (Throwable)` as safety net — cancels all, calls `onFailure`, rethrows
+- Outer `try/catch (Throwable)` as safety net — cancels all, calls `onAbort`, rethrows
 - Breaks out of `stream()` foreach only when a retry is scheduled (to restart stream with updated pool)
 
 ### Callbacks
@@ -59,7 +59,6 @@ Fires all HTTP requests immediately (Symfony HttpClient is async by default). St
 - `onRetry(Closure)` — called when a retry fires: `(string $key, int $attempt, ResponseInterface $failedResponse, ExceptionInterface $e, ResponseInterface $retryResponse)`
 - `onExhausted(Closure)` — called when a single request exhausts all retries: `(string $key, ResponseInterface $response, TransportExceptionInterface|HttpExceptionInterface $e)`
 - `onAbort(Closure)` — called when an unexpected exception cancels the whole batch (broken JSON, throwing user callback, etc.): `(string $key, ResponseInterface $response, Throwable $e)`. Skipped if the throw happened before any response was processed.
-- `onFailure(Closure)` — **deprecated**. Marked with `#[Deprecated]`. Kept as a fallback for both `onExhausted` and `onAbort` so existing callers keep working. Will be removed in `3.0`.
 
 ### Retry behavior
 
@@ -110,7 +109,7 @@ Unit tests in `tests/Unit/BatchHttpClientTest.php` using `MockHttpClient` / `Moc
 - `throwOnError: false` — failed requests return `null`
 - Transport exception handling — DNS failure, connection timeout
 - `retryOnTransportException: true` vs `false`
-- `onSuccess` / `onRetry` / `onFailure` callbacks — verify they receive correct arguments
+- `onSuccess` / `onRetry` / `onExhausted` / `onAbort` callbacks — verify they receive correct arguments
 - `decodeJson: true` vs `false` — `toArray()` vs `getContent()`
 - `retryOptions` merging — verify `array_replace_recursive` behavior on retries
 - `retryOptions` as Closure — verify dynamic retry options based on attempt/exception

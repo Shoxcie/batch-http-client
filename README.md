@@ -94,8 +94,6 @@ $results = $client
     ->fetch();
 ```
 
-> `onFailure(Closure)` is deprecated since `2.1.0` — it's still called as a fallback when neither `onExhausted` nor `onAbort` is set. Migrate by splitting your handler into the two cases above. The deprecated method will be removed in `3.0`.
-
 ### Error handling
 
 By default, if a request exhausts all retries, the last exception is rethrown and all in-flight requests are cancelled:

@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Shoxcie\BatchHttpClient;
 
 use Closure;
-use Deprecated;
 use InvalidArgumentException;
 use Symfony\Component\HttpClient\HttpClient;
 use Symfony\Contracts\HttpClient\Exception\ExceptionInterface;
@@ -42,9 +41,6 @@ final class BatchHttpClient
 
     /** @var null|Closure(string, ResponseInterface, Throwable): void */
     private ?Closure $onAbort = null;
-
-    /** @var null|Closure(string, ResponseInterface, Throwable): void */
-    private ?Closure $onFailure = null;
 
     public function __construct(
         ?HttpClientInterface $httpClient = null,
@@ -114,15 +110,6 @@ final class BatchHttpClient
         return $this;
     }
 
-    /** @param Closure(string, ResponseInterface, Throwable): void $closure */
-    #[Deprecated(message: 'use onExhausted() for retries-exhausted or onAbort() for unexpected aborts')]
-    public function onFailure(Closure $closure): static
-    {
-        $this->onFailure = $closure;
-
-        return $this;
-    }
-
     /**
      * @return array<string, mixed>
      *
@@ -170,14 +157,10 @@ final class BatchHttpClient
         } catch (Throwable $e) {
             $this->cancelAll();
 
-            if (isset($response)) {
+            if (isset($response) && $this->onAbort instanceof Closure) {
                 $key = $this->getKey($response);
 
-                $callback = $this->onAbort ?? $this->onFailure;
-
-                if ($callback instanceof Closure) {
-                    $callback($key, $response, $e);
-                }
+                ($this->onAbort)($key, $response, $e);
             }
 
             throw $e;
@@ -212,10 +195,8 @@ final class BatchHttpClient
             return true;
         }
 
-        $callback = $this->onExhausted ?? $this->onFailure;
-
-        if ($callback instanceof Closure) {
-            $callback($key, $response, $e);
+        if ($this->onExhausted instanceof Closure) {
+            ($this->onExhausted)($key, $response, $e);
         }
 
         if ($config->throwOnError) {
