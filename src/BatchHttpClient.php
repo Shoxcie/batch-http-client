@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Shoxcie\BatchHttpClient;
 
 use Closure;
+use Deprecated;
 use InvalidArgumentException;
 use Symfony\Component\HttpClient\HttpClient;
 use Symfony\Contracts\HttpClient\Exception\ExceptionInterface;
@@ -35,6 +36,12 @@ final class BatchHttpClient
 
     /** @var null|Closure(string, int, ResponseInterface, ExceptionInterface, ResponseInterface): void */
     private ?Closure $onRetry = null;
+
+    /** @var null|Closure(string, ResponseInterface, TransportExceptionInterface|HttpExceptionInterface): void */
+    private ?Closure $onExhausted = null;
+
+    /** @var null|Closure(string, ResponseInterface, Throwable): void */
+    private ?Closure $onAbort = null;
 
     /** @var null|Closure(string, ResponseInterface, Throwable): void */
     private ?Closure $onFailure = null;
@@ -91,7 +98,24 @@ final class BatchHttpClient
         return $this;
     }
 
+    /** @param Closure(string, ResponseInterface, TransportExceptionInterface|HttpExceptionInterface): void $closure */
+    public function onExhausted(Closure $closure): self
+    {
+        $this->onExhausted = $closure;
+
+        return $this;
+    }
+
     /** @param Closure(string, ResponseInterface, Throwable): void $closure */
+    public function onAbort(Closure $closure): self
+    {
+        $this->onAbort = $closure;
+
+        return $this;
+    }
+
+    /** @param Closure(string, ResponseInterface, Throwable): void $closure */
+    #[Deprecated(message: 'use onExhausted() for retries-exhausted or onAbort() for unexpected aborts')]
     public function onFailure(Closure $closure): self
     {
         $this->onFailure = $closure;
@@ -149,8 +173,10 @@ final class BatchHttpClient
             if (isset($response)) {
                 $key = $this->getKey($response);
 
-                if ($this->onFailure instanceof Closure) {
-                    ($this->onFailure)($key, $response, $e);
+                $callback = $this->onAbort ?? $this->onFailure;
+
+                if ($callback instanceof Closure) {
+                    $callback($key, $response, $e);
                 }
             }
 
@@ -187,8 +213,10 @@ final class BatchHttpClient
             return true;
         }
 
-        if ($this->onFailure instanceof Closure) {
-            ($this->onFailure)($key, $response, $e);
+        $callback = $this->onExhausted ?? $this->onFailure;
+
+        if ($callback instanceof Closure) {
+            $callback($key, $response, $e);
         }
 
         if ($config->throwOnError) {

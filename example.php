@@ -7,6 +7,8 @@ require __DIR__ . '/vendor/autoload.php';
 use Shoxcie\BatchHttpClient\BatchHttpClient;
 use Shoxcie\BatchHttpClient\RequestConfig;
 use Symfony\Contracts\HttpClient\Exception\ExceptionInterface;
+use Symfony\Contracts\HttpClient\Exception\HttpExceptionInterface;
+use Symfony\Contracts\HttpClient\Exception\TransportExceptionInterface;
 use Symfony\Contracts\HttpClient\ResponseInterface;
 use function Shoxcie\BatchHttpClient\{get_content, get_headers, get_status_code, get_total_time, get_url};
 
@@ -88,10 +90,28 @@ function logRetry(string $key, int $attempt, ResponseInterface $response, Except
     );
 }
 
-function logFailure(string $key, ResponseInterface $response, Throwable $e): void
+/**
+ * @param TransportExceptionInterface|HttpExceptionInterface $e
+ */
+function logExhausted(string $key, ResponseInterface $response, ExceptionInterface $e): void
 {
     simpleLog(
-        'FAILURE',
+        'EXHAUSTED',
+        $key,
+        get_url($response),
+        get_total_time($response),
+        $e->getMessage(),
+        null,
+        get_status_code($response),
+        get_headers($response),
+        get_content($response),
+    );
+}
+
+function logAbort(string $key, ResponseInterface $response, Throwable $e): void
+{
+    simpleLog(
+        'ABORT',
         $key,
         get_url($response),
         get_total_time($response),
@@ -108,7 +128,8 @@ $scriptStartTime = microtime(true);
 $client = (new BatchHttpClient())
     ->onSuccess(Closure::fromCallable('logSuccess'))
     ->onRetry(Closure::fromCallable('logRetry'))
-    ->onFailure(Closure::fromCallable('logFailure'));
+    ->onExhausted(Closure::fromCallable('logExhausted'))
+    ->onAbort(Closure::fromCallable('logAbort'));
 
 $requestsStartTime = microtime(true);
 
@@ -141,9 +162,9 @@ $requestsDurationMs = round((microtime(true) - $requestsStartTime) * 1000) . 'ms
 echo 'Total time => ' . $requestsDurationMs;
 
 /**
- * RETRY   | Key => Request 2 | Execution Time => 1021ms | Request Time => 1013ms | URL => https://httpbin.org/delay/7  | Exception => Operation timed out after 1013 milliseconds with 0 bytes received | Attempt => 1
- * FAILURE | Key => Request 2 | Execution Time => 3032ms | Request Time => 2011ms | URL => https://httpbin.org/delay/10 | Exception => Operation timed out after 2010 milliseconds with 0 bytes received
- * RETRY   | Key => Request 1 | Execution Time => 5012ms | Request Time => 5005ms | URL => https://httpbin.org/delay/7  | Exception => Operation timed out after 5004 milliseconds with 0 bytes received | Attempt => 1
- * SUCCESS | Key => Request 1 | Execution Time => 5147ms | Request Time =>  135ms | URL => https://httpbin.org/get      | HTTP Code => 200 | Response Headers => . . .
+ * RETRY     | Key => Request 2 | Execution Time => 1021ms | Request Time => 1013ms | URL => https://httpbin.org/delay/7  | Exception => Operation timed out after 1013 milliseconds with 0 bytes received | Attempt => 1
+ * EXHAUSTED | Key => Request 2 | Execution Time => 3032ms | Request Time => 2011ms | URL => https://httpbin.org/delay/10 | Exception => Operation timed out after 2010 milliseconds with 0 bytes received
+ * RETRY     | Key => Request 1 | Execution Time => 5012ms | Request Time => 5005ms | URL => https://httpbin.org/delay/7  | Exception => Operation timed out after 5004 milliseconds with 0 bytes received | Attempt => 1
+ * SUCCESS   | Key => Request 1 | Execution Time => 5147ms | Request Time =>  135ms | URL => https://httpbin.org/get      | HTTP Code => 200 | Response Headers => . . .
  * Total time => 5144ms
  */
