@@ -22,13 +22,14 @@ $results = $client
     ])
     ->onSuccess(function (string $key, ResponseInterface $response) { ... })
     ->onRetry(function (string $key, int $attempt, ResponseInterface $failedResponse, ExceptionInterface $e, ResponseInterface $retryResponse) { ... })
-    ->onFailure(function (string $key, ResponseInterface $response, Throwable $e) { ... })
+    ->onExhausted(function (string $key, ResponseInterface $response, TransportExceptionInterface|HttpExceptionInterface $e) { ... })
+    ->onAbort(function (string $key, ResponseInterface $response, Throwable $e) { ... })
     ->fetch();
 ```
 
 ### Classes
 
-- `BatchHttpClient` — stateful, has `request()`, `onSuccess()`, `onRetry()`, `onFailure()`, and `fetch()`. Accepts optional `HttpClientInterface` in constructor (defaults to `HttpClient::create()`).
+- `BatchHttpClient` — stateful, has `request()`, `onSuccess()`, `onRetry()`, `onExhausted()`, `onAbort()`, and `fetch()`. Also exposes the deprecated `onFailure()` (fallback for both new callbacks; will be removed in `3.0`). Accepts optional `HttpClientInterface` in constructor (defaults to `HttpClient::create()`).
 - `RequestConfig` — readonly DTO for per-request params. Constructor with defaults:
   - `method` (string)
   - `url` (string)
@@ -56,7 +57,9 @@ Fires all HTTP requests immediately (Symfony HttpClient is async by default). St
 
 - `onSuccess(Closure)` — called for each 2xx response: `(string $key, ResponseInterface $response)`
 - `onRetry(Closure)` — called when a retry fires: `(string $key, int $attempt, ResponseInterface $failedResponse, ExceptionInterface $e, ResponseInterface $retryResponse)`
-- `onFailure(Closure)` — called when a request fails permanently: `(string $key, ResponseInterface $response, Throwable $e)`
+- `onExhausted(Closure)` — called when a single request exhausts all retries: `(string $key, ResponseInterface $response, TransportExceptionInterface|HttpExceptionInterface $e)`
+- `onAbort(Closure)` — called when an unexpected exception cancels the whole batch (broken JSON, throwing user callback, etc.): `(string $key, ResponseInterface $response, Throwable $e)`. Skipped if the throw happened before any response was processed.
+- `onFailure(Closure)` — **deprecated**. Marked with `#[Deprecated]`. Kept as a fallback for both `onExhausted` and `onAbort` so existing callers keep working. Will be removed in `3.0`.
 
 ### Retry behavior
 

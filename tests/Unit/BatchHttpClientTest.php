@@ -566,6 +566,153 @@ describe('callbacks', function (): void {
 
         expect($calls)->toBe(1);
     });
+
+    test('onExhausted receives key, response, and exception', function (): void {
+        $captured = [];
+
+        $mockClient = new MockHttpClient([
+            new JsonMockResponse([], ['http_code' => 500]),
+        ]);
+
+        new BatchHttpClient($mockClient)
+            ->request([
+                'api' => new RequestConfig('GET', 'https://api.example.com/api', throwOnError: false),
+            ])
+            ->onExhausted(function (string $key, ResponseInterface $response, \Throwable $e) use (&$captured): void {
+                $captured[] = ['key' => $key, 'response' => $response, 'exception' => $e];
+            })
+            ->fetch();
+
+        expect($captured)->toHaveCount(1)
+            ->and($captured[0]['key'])->toBe('api')
+            ->and($captured[0]['response'])->toBeInstanceOf(ResponseInterface::class)
+            ->and($captured[0]['exception'])->toBeInstanceOf(\Throwable::class);
+    });
+
+    test('onExhausted is invoked exactly once when throwOnError rethrows', function (): void {
+        $calls = 0;
+        $mockClient = new MockHttpClient(
+            fn(): JsonMockResponse => new JsonMockResponse([], ['http_code' => 500]),
+        );
+
+        try {
+            new BatchHttpClient($mockClient)
+                ->request(['api' => new RequestConfig('GET', 'https://api.example.com/api')])
+                ->onExhausted(function () use (&$calls): void {
+                    ++$calls;
+                })
+                ->fetch();
+        } catch (ServerException) {
+        }
+
+        expect($calls)->toBe(1);
+    });
+
+    test('onExhausted takes precedence over onFailure when both are set', function (): void {
+        $exhaustedCalls = 0;
+        $failureCalls = 0;
+
+        $mockClient = new MockHttpClient([
+            new JsonMockResponse([], ['http_code' => 500]),
+        ]);
+
+        new BatchHttpClient($mockClient)
+            ->request([
+                'api' => new RequestConfig('GET', 'https://api.example.com/api', throwOnError: false),
+            ])
+            ->onExhausted(function () use (&$exhaustedCalls): void {
+                ++$exhaustedCalls;
+            })
+            ->onFailure(function () use (&$failureCalls): void {
+                ++$failureCalls;
+            })
+            ->fetch();
+
+        expect($exhaustedCalls)->toBe(1)
+            ->and($failureCalls)->toBe(0);
+    });
+
+    test('onAbort receives key, response, and exception on unexpected exception', function (): void {
+        $captured = [];
+        $thrown = null;
+
+        $mockClient = new MockHttpClient([
+            new MockResponse('not json', ['response_headers' => ['content-type' => 'application/json']]),
+        ]);
+
+        try {
+            new BatchHttpClient($mockClient)
+                ->request([
+                    'api' => new RequestConfig('GET', 'https://api.example.com/api'),
+                ])
+                ->onAbort(function (string $key, ResponseInterface $response, \Throwable $e) use (&$captured): void {
+                    $captured[] = ['key' => $key, 'response' => $response, 'exception' => $e];
+                })
+                ->fetch();
+        } catch (\JsonException $e) {
+            $thrown = $e;
+        }
+
+        expect($thrown)->toBeInstanceOf(\JsonException::class)
+            ->and($captured)->toHaveCount(1)
+            ->and($captured[0]['key'])->toBe('api')
+            ->and($captured[0]['response'])->toBeInstanceOf(ResponseInterface::class)
+            ->and($captured[0]['exception'])->toBeInstanceOf(\JsonException::class);
+    });
+
+    test('onAbort takes precedence over onFailure when both are set', function (): void {
+        $abortCalls = 0;
+        $failureCalls = 0;
+
+        $mockClient = new MockHttpClient([
+            new MockResponse('not json', ['response_headers' => ['content-type' => 'application/json']]),
+        ]);
+
+        try {
+            new BatchHttpClient($mockClient)
+                ->request([
+                    'api' => new RequestConfig('GET', 'https://api.example.com/api'),
+                ])
+                ->onAbort(function () use (&$abortCalls): void {
+                    ++$abortCalls;
+                })
+                ->onFailure(function () use (&$failureCalls): void {
+                    ++$failureCalls;
+                })
+                ->fetch();
+        } catch (\JsonException) {
+        }
+
+        expect($abortCalls)->toBe(1)
+            ->and($failureCalls)->toBe(0);
+    });
+
+    test('onFailure does not fire on the abort path when onExhausted is set but onAbort is not', function (): void {
+        $exhaustedCalls = 0;
+        $failureCalls = 0;
+
+        $mockClient = new MockHttpClient([
+            new MockResponse('not json', ['response_headers' => ['content-type' => 'application/json']]),
+        ]);
+
+        try {
+            new BatchHttpClient($mockClient)
+                ->request([
+                    'api' => new RequestConfig('GET', 'https://api.example.com/api'),
+                ])
+                ->onExhausted(function () use (&$exhaustedCalls): void {
+                    ++$exhaustedCalls;
+                })
+                ->onFailure(function () use (&$failureCalls): void {
+                    ++$failureCalls;
+                })
+                ->fetch();
+        } catch (\JsonException) {
+        }
+
+        expect($exhaustedCalls)->toBe(0)
+            ->and($failureCalls)->toBe(1);
+    });
 });
 
 describe('decodeJson', function (): void {

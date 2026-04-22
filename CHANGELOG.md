@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0] - 2026-04-22
+
+### Added
+
+- `BatchHttpClient::onExhausted(Closure)` — fired when a single request exhausts all retries. Exception parameter is narrowed to `TransportExceptionInterface | HttpExceptionInterface`.
+- `BatchHttpClient::onAbort(Closure)` — fired when an unexpected `Throwable` (broken JSON with `decodeJson: true`, user callback throwing, etc.) cancels the whole batch.
+
+### Deprecated
+
+- `BatchHttpClient::onFailure(Closure)` — split into `onExhausted` and `onAbort`. `onFailure` still fires as a fallback for either path when the corresponding new callback is not set, so existing code keeps working. Will be removed in `3.0`.
+
 ## [2.0.0] - 2026-04-20
 
 ### Removed

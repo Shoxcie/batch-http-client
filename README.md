@@ -85,11 +85,16 @@ $results = $client
     ->onRetry(function (string $key, int $attempt, ResponseInterface $failedResponse, ExceptionInterface $e, ResponseInterface $retryResponse) {
         // called when a retry fires
     })
-    ->onFailure(function (string $key, ResponseInterface $response, Throwable $e) {
-        // called when a request fails permanently (retries exhausted)
+    ->onExhausted(function (string $key, ResponseInterface $response, TransportExceptionInterface|HttpExceptionInterface $e) {
+        // called when a single request exhausts all retries
+    })
+    ->onAbort(function (string $key, ResponseInterface $response, Throwable $e) {
+        // called when an unexpected exception (broken JSON, throwing callback, ...) cancels the whole batch
     })
     ->fetch();
 ```
+
+> `onFailure(Closure)` is deprecated since `2.1.0` — it's still called as a fallback when neither `onExhausted` nor `onAbort` is set. Migrate by splitting your handler into the two cases above. The deprecated method will be removed in `3.0`.
 
 ### Error handling
 
