@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.0] - 2026-04-28
+
+### Added
+
+- `RequestConfig::$parseResponse` — optional `Closure(string $key, mixed $result, ResponseInterface $response): mixed` that runs on 2xx responses after decoding and before `onSuccess`. Return value replaces the entry in the results array, enabling custom parsing/transformation.
+- `Shoxcie\BatchHttpClient\InvalidResponseException` — marker `RuntimeException` to throw from a `parseResponse` closure to reject a semantically invalid 2xx response and trigger a retry on the existing retry machinery (counts against `maxRetries`, fires `onRetry`, and on exhaustion fires `onExhausted` plus rethrows if `throwOnError: true`). Any other `Throwable` from the parser routes to `onAbort` as before.
+
+### Changed
+
+- `BatchHttpClient::onRetry()` callback signature for `$e` is now `TransportExceptionInterface | HttpExceptionInterface | InvalidResponseException` (previously `ExceptionInterface`). Tightens the documented type to match what is actually thrown at the call site, and aligns with `onExhausted()`. Contravariant for closures with the previous wider typehint.
+- `BatchHttpClient::onExhausted()` callback signature widened to accept `TransportExceptionInterface | HttpExceptionInterface | InvalidResponseException` for `$e`. Contravariant — existing closures keep working without modification.
+
 ## [3.0.0] - 2026-04-22
 
 ### Removed

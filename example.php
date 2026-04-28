@@ -5,8 +5,8 @@ declare(strict_types=1);
 require __DIR__ . '/vendor/autoload.php';
 
 use Shoxcie\BatchHttpClient\BatchHttpClient;
+use Shoxcie\BatchHttpClient\InvalidResponseException;
 use Shoxcie\BatchHttpClient\RequestConfig;
-use Symfony\Contracts\HttpClient\Exception\ExceptionInterface;
 use Symfony\Contracts\HttpClient\Exception\HttpExceptionInterface;
 use Symfony\Contracts\HttpClient\Exception\TransportExceptionInterface;
 use Symfony\Contracts\HttpClient\ResponseInterface;
@@ -73,7 +73,7 @@ function logSuccess(string $key, ResponseInterface $response): void
     );
 }
 
-function logRetry(string $key, int $attempt, ResponseInterface $response, ExceptionInterface $e, ResponseInterface $retryResponse): void
+function logRetry(string $key, int $attempt, ResponseInterface $response, TransportExceptionInterface|HttpExceptionInterface|InvalidResponseException $e, ResponseInterface $retryResponse): void
 {
     simpleLog(
         prefix: 'RETRY',
@@ -88,7 +88,7 @@ function logRetry(string $key, int $attempt, ResponseInterface $response, Except
     );
 }
 
-function logExhausted(string $key, ResponseInterface $response, TransportExceptionInterface|HttpExceptionInterface $e): void
+function logExhausted(string $key, ResponseInterface $response, TransportExceptionInterface|HttpExceptionInterface|InvalidResponseException $e): void
 {
     simpleLog(
         prefix: 'EXHAUSTED',
