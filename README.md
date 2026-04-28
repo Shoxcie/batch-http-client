@@ -82,10 +82,10 @@ $results = $client
     ->onSuccess(function (string $key, ResponseInterface $response) {
         // called for each 2xx response
     })
-    ->onRetry(function (string $key, int $attempt, ResponseInterface $failedResponse, ExceptionInterface $e, ResponseInterface $retryResponse) {
+    ->onRetry(function (string $key, int $attempt, ResponseInterface $failedResponse, TransportExceptionInterface|HttpExceptionInterface|InvalidResponseException $e, ResponseInterface $retryResponse) {
         // called when a retry fires
     })
-    ->onExhausted(function (string $key, ResponseInterface $response, TransportExceptionInterface|HttpExceptionInterface $e) {
+    ->onExhausted(function (string $key, ResponseInterface $response, TransportExceptionInterface|HttpExceptionInterface|InvalidResponseException $e) {
         // called when a single request exhausts all retries
     })
     ->onAbort(function (string $key, ResponseInterface $response, Throwable $e) {
@@ -123,6 +123,36 @@ new RequestConfig('GET', 'https://example.com/file.csv',
 )
 ```
 
+### Response parsing / validation
+
+`parseResponse` runs after the body is decoded and before `onSuccess`, only on a 2xx response. The return value replaces the entry in the results array, so it doubles as a custom parser:
+
+```php
+new RequestConfig('GET', 'https://api.example.com/users',
+    parseResponse: fn(string $key, mixed $result, ResponseInterface $response): mixed
+        => $result['data'],
+)
+```
+
+Throw `InvalidResponseException` from the parser to reject a semantically invalid 2xx response and trigger a retry on the same machinery (counts against `maxRetries`, fires `onRetry`, and on exhaustion fires `onExhausted` plus rethrows if `throwOnError: true`):
+
+```php
+use Shoxcie\BatchHttpClient\InvalidResponseException;
+
+new RequestConfig('GET', 'https://api.example.com/job-status',
+    maxRetries: 5,
+    parseResponse: function (string $key, mixed $result): mixed {
+        if ($result['status'] === 'pending') {
+            throw new InvalidResponseException('job not finished');
+        }
+
+        return $result;
+    },
+)
+```
+
+Any other `Throwable` from the parser is treated as an unexpected error and routes to `onAbort`, cancelling the whole batch.
+
 ### Custom HTTP client
 
 Pass any `HttpClientInterface` implementation:
@@ -150,6 +180,7 @@ $client = new BatchHttpClient($httpClient);
 | `decodeJson` | `bool` | `true` | Decode response as JSON |
 | `maxRetries` | `int` | `0` | Maximum retry attempts |
 | `retryOnTransportException` | `bool` | `true` | Retry on transport errors (timeouts, DNS) |
+| `parseResponse` | `Closure\|null` | `null` | Runs on 2xx responses before `onSuccess`. Receives `(string $key, mixed $result, ResponseInterface $response)`; return value replaces the result. Throw `InvalidResponseException` to retry. |
 
 > [!IMPORTANT]
 > The `user_data` option is reserved for internal key correlation — passing it in `options` or `retryOptions` throws `InvalidArgumentException`.
