@@ -40,7 +40,7 @@ function get_status_code(ResponseInterface $response, bool $throw = false): int
 function get_headers(ResponseInterface $response, bool $throw = false): array
 {
     try {
-        return $response->getHeaders();
+        return $response->getHeaders($throw);
 
     } catch (ExceptionInterface $e) {
         if ($throw) {
@@ -54,7 +54,7 @@ function get_headers(ResponseInterface $response, bool $throw = false): array
 function get_content(ResponseInterface $response, bool $throw = false): string
 {
     try {
-        return $response->getContent();
+        return $response->getContent($throw);
 
     } catch (ExceptionInterface $e) {
         if ($throw) {
