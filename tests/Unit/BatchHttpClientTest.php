@@ -133,9 +133,9 @@ describe('mixed success/failure results', function (): void {
 
         $results = new BatchHttpClient($mockClient)
             ->request([
-                'users' => new RequestConfig('GET', 'https://api.example.com/users', throwOnError: false),
-                'failing' => new RequestConfig('GET', 'https://api.example.com/failing', throwOnError: false),
-                'orders' => new RequestConfig('GET', 'https://api.example.com/orders', throwOnError: false),
+                'users' => new RequestConfig('GET', 'https://api.example.com/users', throwOnExhausted: false),
+                'failing' => new RequestConfig('GET', 'https://api.example.com/failing', throwOnExhausted: false),
+                'orders' => new RequestConfig('GET', 'https://api.example.com/orders', throwOnExhausted: false),
             ])
             ->fetch();
 
@@ -160,10 +160,10 @@ describe('mixed success/failure results', function (): void {
         );
 
         $configs = [
-            'ok-1' => new RequestConfig('GET', 'https://api.example.com/ok-1', throwOnError: false),
-            'not-found' => new RequestConfig('GET', 'https://api.example.com/not-found', throwOnError: false),
-            'ok-2' => new RequestConfig('GET', 'https://api.example.com/ok-2', throwOnError: false),
-            'error' => new RequestConfig('GET', 'https://api.example.com/error', throwOnError: false),
+            'ok-1' => new RequestConfig('GET', 'https://api.example.com/ok-1', throwOnExhausted: false),
+            'not-found' => new RequestConfig('GET', 'https://api.example.com/not-found', throwOnExhausted: false),
+            'ok-2' => new RequestConfig('GET', 'https://api.example.com/ok-2', throwOnExhausted: false),
+            'error' => new RequestConfig('GET', 'https://api.example.com/error', throwOnExhausted: false),
         ];
 
         $results = new BatchHttpClient($mockClient)
@@ -182,7 +182,7 @@ describe('retry behavior', function (): void {
 
         new BatchHttpClient($mockClient)
             ->request([
-                'api' => new RequestConfig('GET', 'https://api.example.com/api', throwOnError: false, maxRetries: 3),
+                'api' => new RequestConfig('GET', 'https://api.example.com/api', throwOnExhausted: false, maxRetries: 3),
             ])
             ->fetch();
 
@@ -196,7 +196,7 @@ describe('retry behavior', function (): void {
 
         new BatchHttpClient($mockClient)
             ->request([
-                'api' => new RequestConfig('GET', 'https://api.example.com/api', throwOnError: false),
+                'api' => new RequestConfig('GET', 'https://api.example.com/api', throwOnExhausted: false),
             ])
             ->fetch();
 
@@ -242,8 +242,8 @@ describe('retry behavior', function (): void {
 
         new BatchHttpClient($mockClient)
             ->request([
-                'alpha' => new RequestConfig('GET', 'https://api.example.com/alpha', throwOnError: false, maxRetries: 2),
-                'beta' => new RequestConfig('GET', 'https://api.example.com/beta', throwOnError: false, maxRetries: 4),
+                'alpha' => new RequestConfig('GET', 'https://api.example.com/alpha', throwOnExhausted: false, maxRetries: 2),
+                'beta' => new RequestConfig('GET', 'https://api.example.com/beta', throwOnExhausted: false, maxRetries: 4),
             ])
             ->fetch();
 
@@ -252,7 +252,7 @@ describe('retry behavior', function (): void {
     });
 });
 
-describe('throwOnError: true', function (): void {
+describe('throwOnExhausted: true', function (): void {
     test('throws exception after retries exhausted', function (): void {
         $mockClient = new MockHttpClient(
             fn(): JsonMockResponse => new JsonMockResponse([], ['http_code' => 500]),
@@ -288,7 +288,7 @@ describe('throwOnError: true', function (): void {
     test('cancels all in-flight requests on failure', function (): void {})->todo();
 });
 
-describe('throwOnError: false', function (): void {
+describe('throwOnExhausted: false', function (): void {
     test('failed request returns null in results', function (): void {
         $mockClient = new MockHttpClient(
             fn(): JsonMockResponse => new JsonMockResponse([], ['http_code' => 500]),
@@ -296,7 +296,7 @@ describe('throwOnError: false', function (): void {
 
         $results = new BatchHttpClient($mockClient)
             ->request([
-                'api' => new RequestConfig('GET', 'https://api.example.com/api', throwOnError: false),
+                'api' => new RequestConfig('GET', 'https://api.example.com/api', throwOnExhausted: false),
             ])
             ->fetch();
 
@@ -310,7 +310,7 @@ describe('throwOnError: false', function (): void {
 
         $results = new BatchHttpClient($mockClient)
             ->request([
-                'api' => new RequestConfig('GET', 'https://api.example.com/api', throwOnError: false),
+                'api' => new RequestConfig('GET', 'https://api.example.com/api', throwOnExhausted: false),
             ])
             ->fetch();
 
@@ -330,9 +330,9 @@ describe('throwOnError: false', function (): void {
 
         $results = new BatchHttpClient($mockClient)
             ->request([
-                'failing' => new RequestConfig('GET', 'https://api.example.com/failing', throwOnError: false),
-                'ok-1' => new RequestConfig('GET', 'https://api.example.com/ok-1', throwOnError: false),
-                'ok-2' => new RequestConfig('GET', 'https://api.example.com/ok-2', throwOnError: false),
+                'failing' => new RequestConfig('GET', 'https://api.example.com/failing', throwOnExhausted: false),
+                'ok-1' => new RequestConfig('GET', 'https://api.example.com/ok-1', throwOnExhausted: false),
+                'ok-2' => new RequestConfig('GET', 'https://api.example.com/ok-2', throwOnExhausted: false),
             ])
             ->fetch();
 
@@ -349,7 +349,7 @@ describe('throwOnError: false', function (): void {
 
         $results = new BatchHttpClient($mockClient)
             ->request([
-                'api' => new RequestConfig('GET', 'https://api.example.com/api', throwOnError: false, maxRetries: 2),
+                'api' => new RequestConfig('GET', 'https://api.example.com/api', throwOnExhausted: false, maxRetries: 2),
             ])
             ->fetch();
 
@@ -366,7 +366,7 @@ describe('transport exception handling', function (): void {
 
         $results = new BatchHttpClient($mockClient)
             ->request([
-                'api' => new RequestConfig('GET', 'https://api.example.com/api', throwOnError: false),
+                'api' => new RequestConfig('GET', 'https://api.example.com/api', throwOnExhausted: false),
             ])
             ->fetch();
 
@@ -380,14 +380,14 @@ describe('transport exception handling', function (): void {
 
         $results = new BatchHttpClient($mockClient)
             ->request([
-                'api' => new RequestConfig('GET', 'https://api.example.com/api', throwOnError: false),
+                'api' => new RequestConfig('GET', 'https://api.example.com/api', throwOnExhausted: false),
             ])
             ->fetch();
 
         expect($results['api'])->toBeNull();
     });
 
-    test('throws transport exception with throwOnError true', function (): void {
+    test('throws transport exception with throwOnExhausted true', function (): void {
         $mockClient = new MockHttpClient([
             new MockResponse(info: ['error' => 'Host unreachable']),
         ]);
@@ -408,7 +408,7 @@ describe('transport exception handling', function (): void {
 
         $results = new BatchHttpClient($mockClient)
             ->request([
-                'api' => new RequestConfig('GET', 'https://api.example.com/api', throwOnError: false, maxRetries: 2),
+                'api' => new RequestConfig('GET', 'https://api.example.com/api', throwOnExhausted: false, maxRetries: 2),
             ])
             ->fetch();
 
@@ -425,7 +425,7 @@ describe('retryOnTransportException', function (): void {
 
         $results = new BatchHttpClient($mockClient)
             ->request([
-                'api' => new RequestConfig('GET', 'https://api.example.com/api', throwOnError: false, maxRetries: 2, retryOnTransportException: true),
+                'api' => new RequestConfig('GET', 'https://api.example.com/api', throwOnExhausted: false, maxRetries: 2, retryOnTransportException: true),
             ])
             ->fetch();
 
@@ -440,7 +440,7 @@ describe('retryOnTransportException', function (): void {
 
         $results = new BatchHttpClient($mockClient)
             ->request([
-                'api' => new RequestConfig('GET', 'https://api.example.com/api', throwOnError: false, maxRetries: 2, retryOnTransportException: false),
+                'api' => new RequestConfig('GET', 'https://api.example.com/api', throwOnExhausted: false, maxRetries: 2, retryOnTransportException: false),
             ])
             ->fetch();
 
@@ -455,7 +455,7 @@ describe('retryOnTransportException', function (): void {
 
         $results = new BatchHttpClient($mockClient)
             ->request([
-                'api' => new RequestConfig('GET', 'https://api.example.com/api', throwOnError: false, maxRetries: 2, retryOnTransportException: false),
+                'api' => new RequestConfig('GET', 'https://api.example.com/api', throwOnExhausted: false, maxRetries: 2, retryOnTransportException: false),
             ])
             ->fetch();
 
@@ -540,7 +540,7 @@ describe('callbacks', function (): void {
 
         new BatchHttpClient($mockClient)
             ->request([
-                'api' => new RequestConfig('GET', 'https://api.example.com/api', throwOnError: false),
+                'api' => new RequestConfig('GET', 'https://api.example.com/api', throwOnExhausted: false),
             ])
             ->onExhausted(function (string $key, ResponseInterface $response, \Throwable $e) use (&$captured): void {
                 $captured[] = ['key' => $key, 'response' => $response, 'exception' => $e];
@@ -553,7 +553,7 @@ describe('callbacks', function (): void {
             ->and($captured[0]['exception'])->toBeInstanceOf(\Throwable::class);
     });
 
-    test('onExhausted is invoked exactly once when throwOnError rethrows', function (): void {
+    test('onExhausted is invoked exactly once when throwOnExhausted rethrows', function (): void {
         $calls = 0;
         $mockClient = new MockHttpClient(
             fn(): JsonMockResponse => new JsonMockResponse([], ['http_code' => 500]),
@@ -1087,7 +1087,7 @@ describe('parseResponse', function (): void {
             ->and($retryCalls[0]['exception'])->toBeInstanceOf(InvalidResponseException::class);
     });
 
-    test('exhausting retries with throwOnError false fires onExhausted and stores null', function (): void {
+    test('exhausting retries with throwOnExhausted false fires onExhausted and stores null', function (): void {
         $exhaustedCalls = [];
         $mockClient = new MockHttpClient(
             fn(): JsonMockResponse => new JsonMockResponse(['ok' => true]),
@@ -1098,7 +1098,7 @@ describe('parseResponse', function (): void {
                 'api' => new RequestConfig(
                     'GET',
                     'https://api.example.com/api',
-                    throwOnError: false,
+                    throwOnExhausted: false,
                     maxRetries: 2,
                     parseResponse: function (): mixed {
                         throw new InvalidResponseException('always invalid');
@@ -1117,7 +1117,7 @@ describe('parseResponse', function (): void {
             ->and($exhaustedCalls[0]['exception'])->toBeInstanceOf(InvalidResponseException::class);
     });
 
-    test('exhausting retries with throwOnError true rethrows InvalidResponseException without firing onAbort', function (): void {
+    test('exhausting retries with throwOnExhausted true rethrows InvalidResponseException without firing onAbort', function (): void {
         $abortCalls = 0;
         $exhaustedCalls = 0;
         $mockClient = new MockHttpClient(
@@ -1193,7 +1193,7 @@ describe('parseResponse', function (): void {
                 'api' => new RequestConfig(
                     'GET',
                     'https://api.example.com/api',
-                    throwOnError: false,
+                    throwOnExhausted: false,
                     parseResponse: function () use (&$parserCalls): mixed {
                         ++$parserCalls;
 

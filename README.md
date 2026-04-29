@@ -101,15 +101,15 @@ By default, if a request exhausts all retries, the last exception is rethrown an
 ```php
 new RequestConfig('GET', 'https://api.example.com/critical',
     maxRetries: 3,
-    throwOnError: true, // default
+    throwOnExhausted: true, // default
 )
 ```
 
-Set `throwOnError: false` for optional requests. Failed optional requests return `null` in the results array:
+Set `throwOnExhausted: false` for optional requests. Failed optional requests return `null` in the results array:
 
 ```php
 new RequestConfig('GET', 'https://api.example.com/optional',
-    throwOnError: false,
+    throwOnExhausted: false,
 )
 ```
 
@@ -134,7 +134,7 @@ new RequestConfig('GET', 'https://api.example.com/users',
 )
 ```
 
-Throw `InvalidResponseException` from the parser to reject a semantically invalid 2xx response and trigger a retry on the same machinery (counts against `maxRetries`, fires `onRetry`, and on exhaustion fires `onExhausted` plus rethrows if `throwOnError: true`):
+Throw `InvalidResponseException` from the parser to reject a semantically invalid 2xx response and trigger a retry on the same machinery (counts against `maxRetries`, fires `onRetry`, and on exhaustion fires `onExhausted` plus rethrows if `throwOnExhausted: true`):
 
 ```php
 use Shoxcie\BatchHttpClient\InvalidResponseException;
@@ -176,7 +176,7 @@ $client = new BatchHttpClient($httpClient);
 | `url` | `string` | *(required)* | Request URL |
 | `options` | `array` | `[]` | Symfony HttpClient [options](https://symfony.com/doc/current/http_client.html#configuration) |
 | `retryOptions` | `array\|Closure` | `[]` | Options merged on retry, or Closure receiving `(int $attempt, Throwable $e)` |
-| `throwOnError` | `bool` | `true` | Rethrow exception after retries exhausted |
+| `throwOnExhausted` | `bool` | `true` | Rethrow exception after retries exhausted |
 | `decodeJson` | `bool` | `true` | Decode response as JSON |
 | `maxRetries` | `int` | `0` | Maximum retry attempts |
 | `retryOnTransportException` | `bool` | `true` | Retry on transport errors (timeouts, DNS) |

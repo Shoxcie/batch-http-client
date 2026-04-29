@@ -131,14 +131,14 @@ try {
         'Request 1' => new RequestConfig('GET', '',
             options:      ['base_uri' => 'https://httpbin.org/delay/7', 'timeout' =>  5, 'max_duration' =>  5],
             retryOptions: ['base_uri' => 'https://httpbin.org/get',     'timeout' =>  1, 'max_duration' =>  1],
-            throwOnError: false,
+            throwOnExhausted: false,
             decodeJson:   true,
             maxRetries:   1
         ),
         'Request 2' => new RequestConfig('GET', '',
             options:      ['base_uri' => 'https://httpbin.org/delay/7',  'timeout' =>  1, 'max_duration' =>  1],
             retryOptions: ['base_uri' => 'https://httpbin.org/delay/10', 'timeout' =>  2, 'max_duration' =>  2],
-            throwOnError: false,
+            throwOnExhausted: false,
             decodeJson:   true,
             maxRetries:   1
         ),

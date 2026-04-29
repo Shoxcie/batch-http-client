@@ -17,7 +17,7 @@ final readonly class RequestConfig
         public array          $options = [],
         /** @var array<string, mixed>|Closure(int, Throwable): array<string, mixed> */
         public array|Closure  $retryOptions = [],
-        public bool           $throwOnError = true,
+        public bool           $throwOnExhausted = true,
         public bool           $decodeJson = true,
         public int            $maxRetries = 0,
         public bool           $retryOnTransportException = true,

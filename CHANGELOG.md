@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - `BatchHttpClient::onSuccess()` callback signature is now `Closure(string $key, mixed $result, ResponseInterface $response): void` (previously `Closure(string $key, ResponseInterface $response): void`). The `$result` is the value stored in `$results[$key]` — i.e. post-`parseResponse` if one is configured. Not contravariant: existing closures must add the `$result` parameter.
+- `RequestConfig::$throwOnError` renamed to `RequestConfig::$throwOnExhausted`. The previous name suggested "throw on any error" but the property only governs the post-retry-exhausted path; the new name aligns with the existing `onExhausted` callback. No behavior change.
 
 See [upgrade/4.0.md](upgrade/4.0.md) for migration details.
 

@@ -35,11 +35,11 @@ $results = $client
   - `url` (string)
   - `options` (array, default `[]`) — standard Symfony HttpClient options (timeout, max_duration, headers, etc.)
   - `retryOptions` (array|Closure, default `[]`) — merged onto options for retries via `array_replace_recursive($options, $retryOptions)`. If Closure: receives `(int $attempt, Throwable $e)`, must return options array.
-  - `throwOnError` (bool, default `true`) — if true and request exhausts all retries, rethrow last exception and cancel all in-flight requests
+  - `throwOnExhausted` (bool, default `true`) — if true and request exhausts all retries, rethrow last exception and cancel all in-flight requests
   - `decodeJson` (bool, default `true`) — `true`: `toArray()`, `false`: `getContent()`
   - `maxRetries` (int, default `0`) — max retry count
   - `retryOnTransportException` (bool, default `true`) — whether to retry on Symfony transport exceptions (connection timeouts, DNS failures, etc.)
-  - `parseResponse` (Closure|null, default `null`) — runs after the body is decoded and before `onSuccess`, only on a 2xx response. Receives `(string $key, mixed $result, ResponseInterface $response)` and returns the value to store in `$results[$key]`. Throwing `InvalidResponseException` triggers a retry just like an HTTP/transport failure (counts against `maxRetries`, fires `onRetry`, and on exhaustion fires `onExhausted` + rethrows if `throwOnError: true`).
+  - `parseResponse` (Closure|null, default `null`) — runs after the body is decoded and before `onSuccess`, only on a 2xx response. Receives `(string $key, mixed $result, ResponseInterface $response)` and returns the value to store in `$results[$key]`. Throwing `InvalidResponseException` triggers a retry just like an HTTP/transport failure (counts against `maxRetries`, fires `onRetry`, and on exhaustion fires `onExhausted` + rethrows if `throwOnExhausted: true`).
 - `InvalidResponseException` — marker `RuntimeException` thrown from a `parseResponse` closure to reject a semantically invalid 2xx response and request a retry.
 
 ### `request(array<string, RequestConfig>)` — fire all requests, return `static`
@@ -76,8 +76,8 @@ Fires all HTTP requests immediately (Symfony HttpClient is async by default). St
 ### Output
 
 - `array<string, mixed>` of results keyed by request key
-- Failed optional requests (`throwOnError: false`) return `null`
-- If `throwOnError` request fails after all retries → rethrow the last caught Symfony exception, cancel all remaining requests
+- Failed optional requests (`throwOnExhausted: false`) return `null`
+- If `throwOnExhausted` request fails after all retries → rethrow the last caught Symfony exception, cancel all remaining requests
 
 ## Commands
 
@@ -108,8 +108,8 @@ Unit tests in `tests/Unit/BatchHttpClientTest.php` using `MockHttpClient` / `Moc
 - Successful batch requests (2xx) — verify results array matches input keys
 - Mixed success/failure results — some 2xx, some errors
 - Retry behavior — verify retry count
-- `throwOnError: true` — exception thrown after retries exhausted, all in-flight cancelled
-- `throwOnError: false` — failed requests return `null`
+- `throwOnExhausted: true` — exception thrown after retries exhausted, all in-flight cancelled
+- `throwOnExhausted: false` — failed requests return `null`
 - Transport exception handling — DNS failure, connection timeout
 - `retryOnTransportException: true` vs `false`
 - `onSuccess` / `onRetry` / `onExhausted` / `onAbort` callbacks — verify they receive correct arguments
@@ -118,4 +118,4 @@ Unit tests in `tests/Unit/BatchHttpClientTest.php` using `MockHttpClient` / `Moc
 - `retryOptions` as Closure — verify dynamic retry options based on attempt/exception
 - `user_data` rejection — throws `InvalidArgumentException` when `options` or a `retryOptions` Closure contains `user_data`
 - Safety-net catch — outer `catch(Throwable)` handles unexpected exceptions (e.g. from callbacks, broken JSON with `decodeJson: true`)
-- `parseResponse` — replaces results, retries on `InvalidResponseException`, exhausts to `onExhausted`/`null`/rethrow per `throwOnError`, and routes any other throwable to `onAbort`
+- `parseResponse` — replaces results, retries on `InvalidResponseException`, exhausts to `onExhausted`/`null`/rethrow per `throwOnExhausted`, and routes any other throwable to `onAbort`
