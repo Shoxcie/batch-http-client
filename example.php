@@ -7,8 +7,7 @@ require __DIR__ . '/vendor/autoload.php';
 use Shoxcie\BatchHttpClient\BatchHttpClient;
 use Shoxcie\BatchHttpClient\InvalidResponseException;
 use Shoxcie\BatchHttpClient\RequestConfig;
-use Symfony\Contracts\HttpClient\Exception\HttpExceptionInterface;
-use Symfony\Contracts\HttpClient\Exception\TransportExceptionInterface;
+use Symfony\Contracts\HttpClient\Exception\ExceptionInterface;
 use Symfony\Contracts\HttpClient\ResponseInterface;
 use function Shoxcie\BatchHttpClient\{get_content, get_headers, get_status_code, get_total_time, get_url};
 
@@ -22,7 +21,7 @@ function simpleLog(
     string $url,
     float $duration,
     ?string $exceptionMessage = null,
-    ?int $attempt = null,
+    ?int $retries = null,
     ?int $statusCode = null,
     ?array $headers = null,
     ?string $body = null
@@ -41,8 +40,8 @@ function simpleLog(
         $parts[] = 'Exception => ' . explode(' for "', $exceptionMessage)[0];
     }
 
-    if (isset($attempt)) {
-        $parts[] = 'Attempt => ' . $attempt;
+    if (isset($retries)) {
+        $parts[] = 'Retries => ' . $retries;
     }
 
     if ($statusCode) {
@@ -60,7 +59,7 @@ function simpleLog(
     echo implode(' | ', $parts) . PHP_EOL . PHP_EOL;
 }
 
-function logSuccess(string $key, ResponseInterface $response): void
+function logSuccess(string $key, int $retries, mixed $result, ResponseInterface $response): void
 {
     simpleLog(
         'SUCCESS',
@@ -68,7 +67,7 @@ function logSuccess(string $key, ResponseInterface $response): void
         get_url($response),
         get_total_time($response),
         null,
-        null,
+        $retries,
         get_status_code($response),
         get_headers($response),
         get_content($response),
@@ -76,9 +75,9 @@ function logSuccess(string $key, ResponseInterface $response): void
 }
 
 /**
- * @param TransportExceptionInterface|HttpExceptionInterface|InvalidResponseException $e
+ * @param ExceptionInterface|InvalidResponseException $e
  */
-function logRetry(string $key, int $attempt, ResponseInterface $response, Throwable $e, ResponseInterface $retryResponse): void
+function logRetry(string $key, int $retries, ResponseInterface $response, Throwable $e, ResponseInterface $retryResponse): void
 {
     simpleLog(
         'RETRY',
@@ -86,7 +85,7 @@ function logRetry(string $key, int $attempt, ResponseInterface $response, Throwa
         get_url($response),
         get_total_time($response),
         $e->getMessage(),
-        $attempt,
+        $retries,
         get_status_code($response),
         get_headers($response),
         get_content($response),
@@ -94,9 +93,9 @@ function logRetry(string $key, int $attempt, ResponseInterface $response, Throwa
 }
 
 /**
- * @param TransportExceptionInterface|HttpExceptionInterface|InvalidResponseException $e
+ * @param ExceptionInterface|InvalidResponseException $e
  */
-function logExhausted(string $key, ResponseInterface $response, Throwable $e): void
+function logExhausted(string $key, int $retries, ResponseInterface $response, Throwable $e): void
 {
     simpleLog(
         'EXHAUSTED',
@@ -104,14 +103,14 @@ function logExhausted(string $key, ResponseInterface $response, Throwable $e): v
         get_url($response),
         get_total_time($response),
         $e->getMessage(),
-        null,
+        $retries,
         get_status_code($response),
         get_headers($response),
         get_content($response),
     );
 }
 
-function logAbort(string $key, ResponseInterface $response, Throwable $e): void
+function logAbort(string $key, int $retries, ResponseInterface $response, Throwable $e): void
 {
     simpleLog(
         'ABORT',
@@ -119,7 +118,7 @@ function logAbort(string $key, ResponseInterface $response, Throwable $e): void
         get_url($response),
         get_total_time($response),
         $e->getMessage(),
-        null,
+        $retries,
         get_status_code($response),
         get_headers($response),
         get_content($response),

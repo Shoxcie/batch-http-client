@@ -66,8 +66,8 @@ Or dynamically with a Closure:
 ```php
 new RequestConfig('GET', 'https://api.example.com/resource',
     maxRetries: 3,
-    retryOptions: function (int $attempt, Throwable $e): array {
-        return ['timeout' => 10 * $attempt];
+    retryOptions: function (string $key, int $retries, ExceptionInterface|InvalidResponseException $e): array {
+        return ['timeout' => 10 * $retries];
     },
 )
 ```
@@ -79,17 +79,20 @@ Retry options are merged onto the original options via `array_replace_recursive(
 ```php
 $results = $client
     ->request([...])
-    ->onSuccess(function (string $key, ResponseInterface $response) {
-        // called for each 2xx response
+    ->onSuccess(function (string $key, int $retries, mixed $result, ResponseInterface $response) {
+        // called for each 2xx response, after parseResponse if configured
+        // $retries = 0 on first-attempt success, N on success after N retries
     })
-    ->onRetry(function (string $key, int $attempt, ResponseInterface $failedResponse, TransportExceptionInterface|HttpExceptionInterface|InvalidResponseException $e, ResponseInterface $retryResponse) {
-        // called when a retry fires
+    ->onRetry(function (string $key, int $retries, ResponseInterface $failedResponse, ExceptionInterface|InvalidResponseException $e, ResponseInterface $retryResponse) {
+        // called when a retry fires; $retries is the retry count after this retry fired (always >= 1)
     })
-    ->onExhausted(function (string $key, ResponseInterface $response, TransportExceptionInterface|HttpExceptionInterface|InvalidResponseException $e) {
+    ->onExhausted(function (string $key, int $retries, ResponseInterface $response, ExceptionInterface|InvalidResponseException $e) {
         // called when a single request exhausts all retries
+        // $retries equals maxRetries normally; less when a transport error short-circuits
     })
-    ->onAbort(function (string $key, ResponseInterface $response, Throwable $e) {
-        // called when an unexpected exception (broken JSON, throwing callback, ...) cancels the whole batch
+    ->onAbort(function (string $key, int $retries, ResponseInterface $response, Throwable $e) {
+        // called when an unexpected exception (e.g. throwing user callback) cancels the whole batch
+        // $retries is the retry count for the request being processed when the abort fired
     })
     ->fetch();
 ```
@@ -101,15 +104,15 @@ By default, if a request exhausts all retries, the last exception is rethrown an
 ```php
 new RequestConfig('GET', 'https://api.example.com/critical',
     maxRetries: 3,
-    throwOnError: true, // default
+    throwOnExhausted: true, // default
 )
 ```
 
-Set `throwOnError: false` for optional requests. Failed optional requests return `null` in the results array:
+Set `throwOnExhausted: false` for optional requests. Failed optional requests return `null` in the results array:
 
 ```php
 new RequestConfig('GET', 'https://api.example.com/optional',
-    throwOnError: false,
+    throwOnExhausted: false,
 )
 ```
 
@@ -134,7 +137,7 @@ new RequestConfig('GET', 'https://api.example.com/users',
 )
 ```
 
-Throw `InvalidResponseException` from the parser to reject a semantically invalid 2xx response and trigger a retry on the same machinery (counts against `maxRetries`, fires `onRetry`, and on exhaustion fires `onExhausted` plus rethrows if `throwOnError: true`):
+Throw `InvalidResponseException` from the parser to reject a semantically invalid 2xx response and trigger a retry (counts against `maxRetries`, fires `onRetry`, and on exhaustion fires `onExhausted` plus rethrows if `throwOnExhausted: true`):
 
 ```php
 use Shoxcie\BatchHttpClient\InvalidResponseException;
@@ -175,19 +178,19 @@ $client = new BatchHttpClient($httpClient);
 | `method` | `string` | *(required)* | HTTP method |
 | `url` | `string` | *(required)* | Request URL |
 | `options` | `array` | `[]` | Symfony HttpClient [options](https://symfony.com/doc/current/http_client.html#configuration) |
-| `retryOptions` | `array\|Closure` | `[]` | Options merged on retry, or Closure receiving `(int $attempt, Throwable $e)` |
-| `throwOnError` | `bool` | `true` | Rethrow exception after retries exhausted |
+| `retryOptions` | `array\|Closure` | `[]` | Options merged on retry, or Closure receiving `(string $key, int $retries, ExceptionInterface\|InvalidResponseException $e)` |
+| `throwOnExhausted` | `bool` | `true` | Rethrow exception after retries exhausted |
 | `decodeJson` | `bool` | `true` | Decode response as JSON |
 | `maxRetries` | `int` | `0` | Maximum retry attempts |
 | `retryOnTransportException` | `bool` | `true` | Retry on transport errors (timeouts, DNS) |
-| `parseResponse` | `Closure\|null` | `null` | Runs on 2xx responses before `onSuccess`. Receives `(string $key, mixed $result, ResponseInterface $response)`; return value replaces the result. Throw `InvalidResponseException` to retry. |
+| `parseResponse` | `Closure\|null` | `null` | Runs on 2xx responses before `onSuccess`. Receives `(string $key, int $retries, mixed $result, ResponseInterface $response)`; return value replaces the result. Throw `InvalidResponseException` to retry. |
 
 > [!IMPORTANT]
 > The `user_data` option is reserved for internal key correlation — passing it in `options` or `retryOptions` throws `InvalidArgumentException`.
 
 ## Upgrading
 
-See [UPGRADE-2.0.md](UPGRADE-2.0.md) for the `1.x` → `2.x` migration guide.
+See the [upgrade/](upgrade/) folder for migration guides between major versions.
 
 ## License
 

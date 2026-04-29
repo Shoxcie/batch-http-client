@@ -9,6 +9,7 @@ use Symfony\Component\HttpClient\Exception\ServerException;
 use Symfony\Component\HttpClient\Exception\TransportException;
 use Symfony\Component\HttpClient\MockHttpClient;
 use Symfony\Component\HttpClient\Response\MockResponse;
+use Symfony\Contracts\HttpClient\Exception\DecodingExceptionInterface;
 use Symfony\Contracts\HttpClient\Exception\ExceptionInterface;
 use Symfony\Contracts\HttpClient\ResponseInterface;
 
@@ -249,7 +250,7 @@ describe('retry behavior', function (): void {
     });
 });
 
-describe('throwOnError: true', function (): void {
+describe('throwOnExhausted: true', function (): void {
     test('throws exception after retries exhausted', function (): void {
         $mockClient = new MockHttpClient(
             fn(): JsonMockResponse => new JsonMockResponse([], ['http_code' => 500]),
@@ -285,7 +286,7 @@ describe('throwOnError: true', function (): void {
     // TODO: test('cancels all in-flight requests on failure', function (): void {})->todo();
 });
 
-describe('throwOnError: false', function (): void {
+describe('throwOnExhausted: false', function (): void {
     test('failed request returns null in results', function (): void {
         $mockClient = new MockHttpClient(
             fn(): JsonMockResponse => new JsonMockResponse([], ['http_code' => 500]),
@@ -371,14 +372,8 @@ describe('transport exception handling', function (): void {
     });
 
     test('handles error during body streaming', function (): void {
-        /** @var \Generator<int, string> $body */
-        $body = (function (): \Generator {
-            yield '';
-            throw new \RuntimeException('Connection reset');
-        })();
-
         $mockClient = new MockHttpClient([
-            new MockResponse($body),
+            new MockResponse([new \RuntimeException('Connection reset')]),
         ]);
 
         $results = (new BatchHttpClient($mockClient))
@@ -390,7 +385,7 @@ describe('transport exception handling', function (): void {
         expect($results['api'])->toBeNull();
     });
 
-    test('throws transport exception with throwOnError true', function (): void {
+    test('throws transport exception with throwOnExhausted true', function (): void {
         $mockClient = new MockHttpClient([
             new MockResponse([], ['error' => 'Host unreachable']),
         ]);
@@ -468,7 +463,7 @@ describe('retryOnTransportException', function (): void {
 });
 
 describe('callbacks', function (): void {
-    test('onSuccess receives key and response', function (): void {
+    test('onSuccess receives key, retries, result, and response', function (): void {
         $captured = [];
 
         $mockClient = new MockHttpClient([
@@ -481,19 +476,50 @@ describe('callbacks', function (): void {
                 'users' => new RequestConfig('GET', 'https://api.example.com/users'),
                 'orders' => new RequestConfig('GET', 'https://api.example.com/orders'),
             ])
-            ->onSuccess(function (string $key, ResponseInterface $response) use (&$captured): void {
-                $captured[] = ['key' => $key, 'response' => $response];
+            ->onSuccess(function (string $key, int $retries, $result, ResponseInterface $response) use (&$captured): void {
+                $captured[] = ['key' => $key, 'retries' => $retries, 'result' => $result, 'response' => $response];
             })
             ->fetch();
 
         expect($captured)->toHaveCount(2)
             ->and($captured[0]['key'])->toBe('users')
+            ->and($captured[0]['retries'])->toBe(0)
+            ->and($captured[0]['result'])->toBe(['id' => 1])
             ->and($captured[0]['response'])->toBeInstanceOf(ResponseInterface::class)
             ->and($captured[1]['key'])->toBe('orders')
+            ->and($captured[1]['retries'])->toBe(0)
+            ->and($captured[1]['result'])->toBe(['id' => 2])
             ->and($captured[1]['response'])->toBeInstanceOf(ResponseInterface::class);
     });
 
-    test('onRetry receives key, attempt, failed response, exception, and retry response', function (): void {
+    test('onSuccess receives non-zero retries when success follows a retry', function (): void {
+        $callCount = 0;
+
+        $mockClient = new MockHttpClient(
+            function () use (&$callCount): JsonMockResponse {
+                ++$callCount;
+
+                return $callCount === 1
+                    ? new JsonMockResponse([], ['http_code' => 500])
+                    : new JsonMockResponse(['ok' => true]);
+            },
+        );
+
+        $capturedRetries = null;
+
+        (new BatchHttpClient($mockClient))
+            ->request([
+                'api' => new RequestConfig('GET', 'https://api.example.com/api', [], [], true, true, 1),
+            ])
+            ->onSuccess(function (string $key, int $retries, $result, ResponseInterface $response) use (&$capturedRetries): void {
+                $capturedRetries = $retries;
+            })
+            ->fetch();
+
+        expect($capturedRetries)->toBe(1);
+    });
+
+    test('onRetry receives key, retries, failed response, exception, and retry response', function (): void {
         $captured = [];
         $callCount = 0;
 
@@ -513,10 +539,10 @@ describe('callbacks', function (): void {
             ->request([
                 'api' => new RequestConfig('GET', 'https://api.example.com/api', [], [], true, true, 2),
             ])
-            ->onRetry(function (string $key, int $attempt, ResponseInterface $failedResponse, ExceptionInterface $e, ResponseInterface $retryResponse) use (&$captured): void {
+            ->onRetry(function (string $key, int $retries, ResponseInterface $failedResponse, ExceptionInterface $e, ResponseInterface $retryResponse) use (&$captured): void {
                 $captured[] = [
                     'key' => $key,
-                    'attempt' => $attempt,
+                    'retries' => $retries,
                     'failedResponse' => $failedResponse,
                     'exception' => $e,
                     'retryResponse' => $retryResponse,
@@ -526,13 +552,13 @@ describe('callbacks', function (): void {
 
         expect($captured)->toHaveCount(1)
             ->and($captured[0]['key'])->toBe('api')
-            ->and($captured[0]['attempt'])->toBe(1)
+            ->and($captured[0]['retries'])->toBe(1)
             ->and($captured[0]['failedResponse'])->toBeInstanceOf(ResponseInterface::class)
             ->and($captured[0]['exception'])->toBeInstanceOf(ExceptionInterface::class)
             ->and($captured[0]['retryResponse'])->toBeInstanceOf(ResponseInterface::class);
     });
 
-    test('onExhausted receives key, response, and exception', function (): void {
+    test('onExhausted receives key, retries, response, and exception', function (): void {
         $captured = [];
 
         $mockClient = new MockHttpClient([
@@ -543,19 +569,21 @@ describe('callbacks', function (): void {
             ->request([
                 'api' => new RequestConfig('GET', 'https://api.example.com/api', [], [], false),
             ])
-            ->onExhausted(function (string $key, ResponseInterface $response, \Throwable $e) use (&$captured): void {
-                $captured[] = ['key' => $key, 'response' => $response, 'exception' => $e];
+            ->onExhausted(function (string $key, int $retries, ResponseInterface $response, \Throwable $e) use (&$captured): void {
+                $captured[] = ['key' => $key, 'retries' => $retries, 'response' => $response, 'exception' => $e];
             })
             ->fetch();
 
         expect($captured)->toHaveCount(1)
             ->and($captured[0]['key'])->toBe('api')
+            ->and($captured[0]['retries'])->toBe(0)
             ->and($captured[0]['response'])->toBeInstanceOf(ResponseInterface::class)
             ->and($captured[0]['exception'])->toBeInstanceOf(\Throwable::class);
     });
 
-    test('onExhausted is invoked exactly once when throwOnError rethrows', function (): void {
+    test('onExhausted is invoked exactly once when throwOnExhausted rethrows', function (): void {
         $calls = 0;
+        $capturedRetries = null;
         $mockClient = new MockHttpClient(
             fn(): JsonMockResponse => new JsonMockResponse([], ['http_code' => 500]),
         );
@@ -563,22 +591,52 @@ describe('callbacks', function (): void {
         try {
             (new BatchHttpClient($mockClient))
                 ->request(['api' => new RequestConfig('GET', 'https://api.example.com/api')])
-                ->onExhausted(function () use (&$calls): void {
+                ->onExhausted(function (string $key, int $retries) use (&$calls, &$capturedRetries): void {
                     ++$calls;
+                    $capturedRetries = $retries;
                 })
                 ->fetch();
         } catch (ServerException $e) {
         }
 
-        expect($calls)->toBe(1);
+        expect($calls)->toBe(1)
+            ->and($capturedRetries)->toBe(0);
     });
 
-    test('onAbort receives key, response, and exception on unexpected exception', function (): void {
+    test('onExhausted receives retries less than maxRetries when transport short-circuits', function (): void {
+        $capturedRetries = null;
+
+        $mockClient = new MockHttpClient(
+            fn(): MockResponse => new MockResponse([], ['error' => 'connection refused']),
+        );
+
+        (new BatchHttpClient($mockClient))
+            ->request([
+                'api' => new RequestConfig(
+                    'GET',
+                    'https://api.example.com/api',
+                    [],
+                    [],
+                    false,
+                    true,
+                    5,
+                    false,
+                ),
+            ])
+            ->onExhausted(function (string $key, int $retries, ResponseInterface $response, $e) use (&$capturedRetries): void {
+                $capturedRetries = $retries;
+            })
+            ->fetch();
+
+        expect($capturedRetries)->toBe(0);
+    });
+
+    test('onAbort receives key, retries, response, and exception on unexpected exception', function (): void {
         $captured = [];
         $thrown = null;
 
         $mockClient = new MockHttpClient([
-            new MockResponse('not json', ['response_headers' => ['content-type' => 'application/json']]),
+            new JsonMockResponse(['ok' => true]),
         ]);
 
         try {
@@ -586,19 +644,56 @@ describe('callbacks', function (): void {
                 ->request([
                     'api' => new RequestConfig('GET', 'https://api.example.com/api'),
                 ])
-                ->onAbort(function (string $key, ResponseInterface $response, \Throwable $e) use (&$captured): void {
-                    $captured[] = ['key' => $key, 'response' => $response, 'exception' => $e];
+                ->onSuccess(function (string $key, int $retries, $result, ResponseInterface $response): void {
+                    throw new \RuntimeException('boom');
+                })
+                ->onAbort(function (string $key, int $retries, ResponseInterface $response, \Throwable $e) use (&$captured): void {
+                    $captured[] = ['key' => $key, 'retries' => $retries, 'response' => $response, 'exception' => $e];
                 })
                 ->fetch();
-        } catch (\JsonException $e) {
+        } catch (\RuntimeException $e) {
             $thrown = $e;
         }
 
-        expect($thrown)->toBeInstanceOf(\JsonException::class)
+        expect($thrown)->toBeInstanceOf(\RuntimeException::class)
             ->and($captured)->toHaveCount(1)
             ->and($captured[0]['key'])->toBe('api')
+            ->and($captured[0]['retries'])->toBe(0)
             ->and($captured[0]['response'])->toBeInstanceOf(ResponseInterface::class)
-            ->and($captured[0]['exception'])->toBeInstanceOf(\JsonException::class);
+            ->and($captured[0]['exception'])->toBeInstanceOf(\RuntimeException::class);
+    });
+
+    test('onAbort receives non-zero retries when abort follows a retry', function (): void {
+        $callCount = 0;
+
+        $mockClient = new MockHttpClient(
+            function () use (&$callCount): JsonMockResponse {
+                ++$callCount;
+
+                return $callCount === 1
+                    ? new JsonMockResponse([], ['http_code' => 500])
+                    : new JsonMockResponse(['ok' => true]);
+            },
+        );
+
+        $capturedRetries = null;
+
+        try {
+            (new BatchHttpClient($mockClient))
+                ->request([
+                    'api' => new RequestConfig('GET', 'https://api.example.com/api', [], [], true, true, 1),
+                ])
+                ->onSuccess(function (string $key, int $retries, $result, ResponseInterface $response): void {
+                    throw new \RuntimeException('boom');
+                })
+                ->onAbort(function (string $key, int $retries, ResponseInterface $response, \Throwable $e) use (&$capturedRetries): void {
+                    $capturedRetries = $retries;
+                })
+                ->fetch();
+        } catch (\RuntimeException $e) {
+        }
+
+        expect($capturedRetries)->toBe(1);
     });
 
 });
@@ -763,7 +858,7 @@ describe('retryOptions merging', function (): void {
 });
 
 describe('retryOptions as Closure', function (): void {
-    test('closure receives attempt number and exception', function (): void {
+    test('closure receives key, attempt number, and exception', function (): void {
         $captured = [];
         $callCount = 0;
 
@@ -785,8 +880,8 @@ describe('retryOptions as Closure', function (): void {
                     'GET',
                     'https://api.example.com/api',
                     [],
-                    function (int $attempt, \Throwable $e) use (&$captured): array {
-                        $captured[] = ['attempt' => $attempt, 'exception' => $e];
+                    function (string $key, int $retries, \Throwable $e) use (&$captured): array {
+                        $captured[] = ['key' => $key, 'retries' => $retries, 'exception' => $e];
 
                         return [];
                     },
@@ -798,9 +893,11 @@ describe('retryOptions as Closure', function (): void {
             ->fetch();
 
         expect($captured)->toHaveCount(2)
-            ->and($captured[0]['attempt'])->toBe(1)
+            ->and($captured[0]['key'])->toBe('api')
+            ->and($captured[0]['retries'])->toBe(1)
             ->and($captured[0]['exception'])->toBeInstanceOf(ExceptionInterface::class)
-            ->and($captured[1]['attempt'])->toBe(2)
+            ->and($captured[1]['key'])->toBe('api')
+            ->and($captured[1]['retries'])->toBe(2)
             ->and($captured[1]['exception'])->toBeInstanceOf(ExceptionInterface::class);
     });
 
@@ -827,7 +924,7 @@ describe('retryOptions as Closure', function (): void {
                     'GET',
                     'https://api.example.com/api',
                     [],
-                    fn(int $attempt, \Throwable $e): array => ['headers' => ['X-Attempt' => '1']],
+                    fn(string $key, int $retries, \Throwable $e): array => ['headers' => ['X-Attempt' => '1']],
                     true,
                     true,
                     1,
@@ -862,7 +959,7 @@ describe('retryOptions as Closure', function (): void {
                     'GET',
                     'https://api.example.com/api',
                     [],
-                    fn(int $attempt, \Throwable $e): array => ['headers' => ['X-Attempt' => (string) $attempt]],
+                    fn(string $key, int $retries, \Throwable $e): array => ['headers' => ['X-Attempt' => (string) $retries]],
                     true,
                     true,
                     2,
@@ -872,6 +969,59 @@ describe('retryOptions as Closure', function (): void {
 
         expect($capturedHeaders[1]['x-attempt'])->toBe(['X-Attempt: 1'])
             ->and($capturedHeaders[2]['x-attempt'])->toBe(['X-Attempt: 2']);
+    });
+
+    test('closure shared across requests sees each key', function (): void {
+        $captured = [];
+        $callCounts = ['users' => 0, 'orders' => 0];
+
+        $mockClient = new MockHttpClient(
+            function (string $method, string $url) use (&$callCounts): JsonMockResponse {
+                $endpoint = str_contains($url, '/users') ? 'users' : 'orders';
+                ++$callCounts[$endpoint];
+
+                if ($callCounts[$endpoint] === 1) {
+                    return new JsonMockResponse([], ['http_code' => 500]);
+                }
+
+                return new JsonMockResponse(['ok' => true]);
+            },
+        );
+
+        $sharedRetryOptions = function (string $key, int $retries, \Throwable $e) use (&$captured): array {
+            $captured[] = ['key' => $key, 'retries' => $retries];
+
+            return [];
+        };
+
+        (new BatchHttpClient($mockClient))
+            ->request([
+                'users' => new RequestConfig(
+                    'GET',
+                    'https://api.example.com/users',
+                    [],
+                    $sharedRetryOptions,
+                    true,
+                    true,
+                    1,
+                ),
+                'orders' => new RequestConfig(
+                    'GET',
+                    'https://api.example.com/orders',
+                    [],
+                    $sharedRetryOptions,
+                    true,
+                    true,
+                    1,
+                ),
+            ])
+            ->fetch();
+
+        $keysSeen = array_column($captured, 'key');
+        sort($keysSeen);
+
+        expect($captured)->toHaveCount(2)
+            ->and($keysSeen)->toBe(['orders', 'users']);
     });
 });
 
@@ -907,9 +1057,9 @@ describe('user_data rejection', function (): void {
                         'GET',
                         'https://api.example.com/api',
                         [],
-                        fn(int $attempt, \Throwable $e): array => ['user_data' => 'nope'],
-                        false,
-                        false,
+                        fn(string $key, int $retries, \Throwable $e): array => ['user_data' => 'nope'],
+                        true,
+                        true,
                         1,
                     ),
                 ])
@@ -919,20 +1069,6 @@ describe('user_data rejection', function (): void {
 });
 
 describe('safety-net catch', function (): void {
-    test('rethrows JsonException on broken JSON with decodeJson true', function (): void {
-        $mockClient = new MockHttpClient([
-            new MockResponse('not json', ['response_headers' => ['content-type' => 'application/json']]),
-        ]);
-
-        expect(
-            fn(): array => (new BatchHttpClient($mockClient))
-            ->request([
-                'api' => new RequestConfig('GET', 'https://api.example.com/api'),
-            ])
-            ->fetch(),
-        )->toThrow(\JsonException::class);
-    });
-
     test('rethrows exception thrown from onSuccess callback', function (): void {
         $mockClient = new MockHttpClient([
             new JsonMockResponse(['ok' => true]),
@@ -943,7 +1079,7 @@ describe('safety-net catch', function (): void {
                 ->request([
                     'api' => new RequestConfig('GET', 'https://api.example.com/api'),
                 ])
-                ->onSuccess(function (string $key, ResponseInterface $response): void {
+                ->onSuccess(function (string $key, int $retries, $result, ResponseInterface $response): void {
                     throw new \RuntimeException('boom');
                 })
                 ->fetch(),
@@ -964,13 +1100,106 @@ describe('safety-net catch', function (): void {
                     'b' => new RequestConfig('GET', 'https://api.example.com/b', [], [], true, true, 3),
                     'c' => new RequestConfig('GET', 'https://api.example.com/c', [], [], true, true, 3),
                 ])
-                ->onSuccess(function (string $key, ResponseInterface $response): void {
+                ->onSuccess(function (string $key, int $retries, $result, ResponseInterface $response): void {
                     throw new \RuntimeException('boom');
                 })
                 ->fetch(),
         )->toThrow(\RuntimeException::class);
 
         expect($mockClient->getRequestsCount())->toBe(3);
+    });
+});
+
+describe('decoding errors', function (): void {
+    test('rethrows JsonException after exhausting retries (default maxRetries 0)', function (): void {
+        $mockClient = new MockHttpClient([
+            new MockResponse('not json', ['response_headers' => ['content-type' => 'application/json']]),
+        ]);
+
+        expect(
+            fn(): array => (new BatchHttpClient($mockClient))
+                ->request([
+                    'api' => new RequestConfig('GET', 'https://api.example.com/api'),
+                ])
+                ->fetch(),
+        )->toThrow(\JsonException::class);
+    });
+
+    test('decoding error triggers retry', function (): void {
+        $callCount = 0;
+
+        $mockClient = new MockHttpClient(
+            function () use (&$callCount): MockResponse {
+                ++$callCount;
+
+                return $callCount === 1
+                    ? new MockResponse('not json', ['response_headers' => ['content-type' => 'application/json']])
+                    : new JsonMockResponse(['ok' => true]);
+            },
+        );
+
+        $retryCalls = [];
+
+        $results = (new BatchHttpClient($mockClient))
+            ->request([
+                'api' => new RequestConfig(
+                    'GET',
+                    'https://api.example.com/api',
+                    [],
+                    [],
+                    true,
+                    true,
+                    1,
+                ),
+            ])
+            ->onRetry(function (string $key, int $retries, ResponseInterface $failedResponse, Throwable $e, ResponseInterface $retryResponse) use (&$retryCalls): void {
+                $retryCalls[] = ['key' => $key, 'retries' => $retries, 'exception' => $e];
+            })
+            ->fetch();
+
+        expect($mockClient->getRequestsCount())->toBe(2)
+            ->and($results['api'])->toBe(['ok' => true])
+            ->and($retryCalls)->toHaveCount(1)
+            ->and($retryCalls[0]['key'])->toBe('api')
+            ->and($retryCalls[0]['retries'])->toBe(1)
+            ->and($retryCalls[0]['exception'])->toBeInstanceOf(DecodingExceptionInterface::class);
+    });
+
+    test('exhausting retries on decoding error fires onExhausted and stores null', function (): void {
+        $mockClient = new MockHttpClient(
+            fn(): MockResponse => new MockResponse('not json', ['response_headers' => ['content-type' => 'application/json']]),
+        );
+
+        $exhaustedCalls = [];
+        $abortCalls = [];
+
+        $results = (new BatchHttpClient($mockClient))
+            ->request([
+                'api' => new RequestConfig(
+                    'GET',
+                    'https://api.example.com/api',
+                    [],
+                    [],
+                    false,
+                    true,
+                    2,
+                ),
+            ])
+            ->onExhausted(function (string $key, int $retries, ResponseInterface $response, Throwable $e) use (&$exhaustedCalls): void {
+                $exhaustedCalls[] = ['key' => $key, 'retries' => $retries, 'exception' => $e];
+            })
+            ->onAbort(function (string $key, int $retries, ResponseInterface $response, \Throwable $e) use (&$abortCalls): void {
+                $abortCalls[] = ['key' => $key, 'exception' => $e];
+            })
+            ->fetch();
+
+        expect($results['api'])->toBeNull()
+            ->and($mockClient->getRequestsCount())->toBe(3)
+            ->and($exhaustedCalls)->toHaveCount(1)
+            ->and($exhaustedCalls[0]['key'])->toBe('api')
+            ->and($exhaustedCalls[0]['retries'])->toBe(2)
+            ->and($exhaustedCalls[0]['exception'])->toBeInstanceOf(DecodingExceptionInterface::class)
+            ->and($abortCalls)->toBe([]);
     });
 });
 
@@ -991,12 +1220,41 @@ describe('parseResponse', function (): void {
                     true,
                     0,
                     true,
-                    fn(string $key, $result, ResponseInterface $response) => $result['data'],
+                    fn(string $key, int $retries, $result, ResponseInterface $response) => $result['data'],
                 ),
             ])
             ->fetch();
 
         expect($results['api'])->toBe(['id' => 1, 'name' => 'Alice']);
+    });
+
+    test('onSuccess receives the parseResponse-transformed result, not the raw decoded body', function (): void {
+        $captured = null;
+
+        $mockClient = new MockHttpClient([
+            new JsonMockResponse(['data' => ['id' => 42], 'meta' => ['v' => 1]]),
+        ]);
+
+        (new BatchHttpClient($mockClient))
+            ->request([
+                'api' => new RequestConfig(
+                    'GET',
+                    'https://api.example.com/api',
+                    [],
+                    [],
+                    true,
+                    true,
+                    0,
+                    true,
+                    fn(string $key, int $retries, $result, ResponseInterface $response) => $result['data'],
+                ),
+            ])
+            ->onSuccess(function (string $key, int $retries, $result, ResponseInterface $response) use (&$captured): void {
+                $captured = $result;
+            })
+            ->fetch();
+
+        expect($captured)->toBe(['id' => 42]);
     });
 
     test('receives key, decoded result, and response', function (): void {
@@ -1017,8 +1275,8 @@ describe('parseResponse', function (): void {
                     true,
                     0,
                     true,
-                    function (string $key, $result, ResponseInterface $response) use (&$captured) {
-                        $captured = ['key' => $key, 'result' => $result, 'response' => $response];
+                    function (string $key, int $retries, $result, ResponseInterface $response) use (&$captured) {
+                        $captured = ['key' => $key, 'retries' => $retries, 'result' => $result, 'response' => $response];
 
                         return $result;
                     },
@@ -1027,6 +1285,7 @@ describe('parseResponse', function (): void {
             ->fetch();
 
         expect($captured['key'])->toBe('api')
+            ->and($captured['retries'])->toBe(0)
             ->and($captured['result'])->toBe(['id' => 7])
             ->and($captured['response'])->toBeInstanceOf(ResponseInterface::class);
     });
@@ -1049,7 +1308,7 @@ describe('parseResponse', function (): void {
                     false,
                     0,
                     true,
-                    function (string $key, $result, ResponseInterface $response) use (&$captured) {
+                    function (string $key, int $retries, $result, ResponseInterface $response) use (&$captured) {
                         $captured = $result;
 
                         return $result;
@@ -1061,9 +1320,40 @@ describe('parseResponse', function (): void {
         expect($captured)->toBe('plain body');
     });
 
+    test('receives $retries === 0 on first-attempt success', function (): void {
+        $captured = null;
+
+        $mockClient = new MockHttpClient([
+            new JsonMockResponse(['ok' => true]),
+        ]);
+
+        (new BatchHttpClient($mockClient))
+            ->request([
+                'api' => new RequestConfig(
+                    'GET',
+                    'https://api.example.com/api',
+                    [],
+                    [],
+                    true,
+                    true,
+                    0,
+                    true,
+                    function (string $key, int $retries, $result) use (&$captured) {
+                        $captured = $retries;
+
+                        return $result;
+                    },
+                ),
+            ])
+            ->fetch();
+
+        expect($captured)->toBe(0);
+    });
+
     test('throwing InvalidResponseException triggers retry', function (): void {
         $callCount = 0;
         $retryCalls = [];
+        $parseRetries = [];
 
         $mockClient = new MockHttpClient(
             function () use (&$callCount): JsonMockResponse {
@@ -1084,7 +1374,9 @@ describe('parseResponse', function (): void {
                     true,
                     2,
                     true,
-                    function (string $key, array $result): array {
+                    function (string $key, int $retries, array $result) use (&$parseRetries): array {
+                        $parseRetries[] = $retries;
+
                         if ($result['attempt'] < 2) {
                             throw new InvalidResponseException('not ready');
                         }
@@ -1093,20 +1385,21 @@ describe('parseResponse', function (): void {
                     },
                 ),
             ])
-            ->onRetry(function (string $key, int $attempt, ResponseInterface $failedResponse, Throwable $e, ResponseInterface $retryResponse) use (&$retryCalls): void {
-                $retryCalls[] = ['key' => $key, 'attempt' => $attempt, 'exception' => $e];
+            ->onRetry(function (string $key, int $retries, ResponseInterface $failedResponse, Throwable $e, ResponseInterface $retryResponse) use (&$retryCalls): void {
+                $retryCalls[] = ['key' => $key, 'retries' => $retries, 'exception' => $e];
             })
             ->fetch();
 
         expect($mockClient->getRequestsCount())->toBe(2)
             ->and($results['api'])->toBe(['attempt' => 2])
+            ->and($parseRetries)->toBe([0, 1])
             ->and($retryCalls)->toHaveCount(1)
             ->and($retryCalls[0]['key'])->toBe('api')
-            ->and($retryCalls[0]['attempt'])->toBe(1)
+            ->and($retryCalls[0]['retries'])->toBe(1)
             ->and($retryCalls[0]['exception'])->toBeInstanceOf(InvalidResponseException::class);
     });
 
-    test('exhausting retries with throwOnError false fires onExhausted and stores null', function (): void {
+    test('exhausting retries with throwOnExhausted false fires onExhausted and stores null', function (): void {
         $exhaustedCalls = [];
         $mockClient = new MockHttpClient(
             fn(): JsonMockResponse => new JsonMockResponse(['ok' => true]),
@@ -1123,13 +1416,13 @@ describe('parseResponse', function (): void {
                     true,
                     2,
                     true,
-                    function (): mixed {
+                    function (): void {
                         throw new InvalidResponseException('always invalid');
                     },
                 ),
             ])
-            ->onExhausted(function (string $key, ResponseInterface $response, $e) use (&$exhaustedCalls): void {
-                $exhaustedCalls[] = ['key' => $key, 'exception' => $e];
+            ->onExhausted(function (string $key, int $retries, ResponseInterface $response, $e) use (&$exhaustedCalls): void {
+                $exhaustedCalls[] = ['key' => $key, 'retries' => $retries, 'exception' => $e];
             })
             ->fetch();
 
@@ -1137,10 +1430,11 @@ describe('parseResponse', function (): void {
             ->and($results['api'])->toBeNull()
             ->and($exhaustedCalls)->toHaveCount(1)
             ->and($exhaustedCalls[0]['key'])->toBe('api')
+            ->and($exhaustedCalls[0]['retries'])->toBe(2)
             ->and($exhaustedCalls[0]['exception'])->toBeInstanceOf(InvalidResponseException::class);
     });
 
-    test('exhausting retries with throwOnError true rethrows InvalidResponseException without firing onAbort', function (): void {
+    test('exhausting retries with throwOnExhausted true rethrows InvalidResponseException without firing onAbort', function (): void {
         $abortCalls = 0;
         $exhaustedCalls = 0;
         $mockClient = new MockHttpClient(
@@ -1159,7 +1453,7 @@ describe('parseResponse', function (): void {
                         true,
                         1,
                         true,
-                        function (): mixed {
+                        function (): void {
                             throw new InvalidResponseException('always invalid');
                         },
                     ),
@@ -1200,12 +1494,12 @@ describe('parseResponse', function (): void {
                         true,
                         0,
                         true,
-                        function (): mixed {
+                        function (): void {
                             throw new \LogicException('unexpected');
                         },
                     ),
                 ])
-                ->onAbort(function (string $key, ResponseInterface $response, \Throwable $e) use (&$aborted): void {
+                ->onAbort(function (string $key, int $retries, ResponseInterface $response, \Throwable $e) use (&$aborted): void {
                     $aborted = ['key' => $key, 'exception' => $e];
                 })
                 ->fetch();
@@ -1233,7 +1527,7 @@ describe('parseResponse', function (): void {
                     true,
                     0,
                     true,
-                    function () use (&$parserCalls): mixed {
+                    function () use (&$parserCalls) {
                         ++$parserCalls;
 
                         return null;
@@ -1247,6 +1541,7 @@ describe('parseResponse', function (): void {
 
     test('only the failing request retries when one request validates and another does not', function (): void {
         $callCounts = ['ok' => 0, 'flaky' => 0];
+        $flakyParseRetries = [];
 
         $mockClient = new MockHttpClient(
             function (string $method, string $url) use (&$callCounts): JsonMockResponse {
@@ -1274,7 +1569,9 @@ describe('parseResponse', function (): void {
                     true,
                     2,
                     true,
-                    function (string $key, array $result): array {
+                    function (string $key, int $retries, array $result) use (&$flakyParseRetries): array {
+                        $flakyParseRetries[] = $retries;
+
                         if ($result['attempt'] < 2) {
                             throw new InvalidResponseException('retry me');
                         }
@@ -1287,6 +1584,7 @@ describe('parseResponse', function (): void {
 
         expect($callCounts['ok'])->toBe(1)
             ->and($callCounts['flaky'])->toBe(2)
+            ->and($flakyParseRetries)->toBe([0, 1])
             ->and($results['ok'])->toBe(['fine' => true])
             ->and($results['flaky'])->toBe(['attempt' => 2]);
     });

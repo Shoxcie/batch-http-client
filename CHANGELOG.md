@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.0.0] - 2026-04-29
+
+### Changed
+
+- `BatchHttpClient::onSuccess()` callback signature is now `Closure(string $key, int $retries, mixed $result, ResponseInterface $response): void` (previously `Closure(string $key, ResponseInterface $response): void`). `$retries` is the number of retries that happened before the success (0 for first-attempt, N for success after N retries). `$result` is the value stored in `$results[$key]` — i.e. post-`parseResponse` if one is configured. Not contravariant: existing closures must add the new positional parameters.
+- `BatchHttpClient::onExhausted()` callback signature is now `Closure(string $key, int $retries, ResponseInterface $response, ExceptionInterface|InvalidResponseException $e): void` (previously without `$retries`). `$retries` equals `maxRetries` on normal exhaustion and is less than `maxRetries` when a transport error short-circuits with `retryOnTransportException: false`. Not contravariant: existing closures must add the `$retries` parameter.
+- `BatchHttpClient::onAbort()` callback signature is now `Closure(string $key, int $retries, ResponseInterface $response, Throwable $e): void` (previously without `$retries`). `$retries` is the retry count for the request being processed when the unexpected abort fired. Not contravariant: existing closures must add the `$retries` parameter. With this change, all four observability callbacks plus `parseResponse` and the `retryOptions` Closure share the `(key, retries, ...)` prefix.
+- `RequestConfig::$parseResponse` callback signature is now `Closure(string $key, int $retries, mixed $result, ResponseInterface $response): mixed` (previously without `$retries`). `$retries` is the number of retries that happened before this parse attempt (0 on first attempt) — the same value `onSuccess` sees on a successful parse. Not contravariant: existing closures must add the `$retries` parameter.
+- `RequestConfig::$retryOptions` Closure signature is now `Closure(string $key, int $retries, ExceptionInterface|InvalidResponseException $e): array<string, mixed>` (previously without `$key`). Brings the Closure into line with the `(string $key, int $retries, ...)` prefix shared by every other caller-facing closure, useful when a single Closure is reused across multiple `RequestConfig`s and needs to branch by key. Not contravariant: existing closures must add the `$key` parameter.
+- `RequestConfig::$throwOnError` renamed to `RequestConfig::$throwOnExhausted`. The previous name suggested "throw on any error" but the property only governs the post-retry-exhausted path; the new name aligns with the existing `onExhausted` callback. No behavior change.
+- The retry catch now covers `Symfony\Contracts\HttpClient\Exception\ExceptionInterface | InvalidResponseException` (previously `TransportExceptionInterface | HttpExceptionInterface | InvalidResponseException`). Decoding errors (notably malformed JSON via `decodeJson: true`) and redirection-without-follow errors are now retried instead of routed to `onAbort`. `onRetry()` and `onExhausted()` callback signatures widen to match. **Behavior change**: a 200 OK with malformed JSON now retries up to `maxRetries` and exhausts to `onExhausted` (or rethrows `JsonException` per `throwOnExhausted`), rather than firing `onAbort` and cancelling the batch.
+
+See [upgrade/4.0.md](upgrade/4.0.md) for migration details.
+
 ## [3.1.0] - 2026-04-28
 
 ### Added
@@ -23,7 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `BatchHttpClient::onFailure(Closure)` (deprecated in 2.1.0). Replace with `onExhausted()` for the retries-exhausted path and/or `onAbort()` for the unexpected-abort path.
 
-See [UPGRADE-3.0.md](UPGRADE-3.0.md) for migration details.
+See [upgrade/3.0.md](upgrade/3.0.md) for migration details.
 
 ## [2.1.0] - 2026-04-22
 
@@ -48,7 +62,7 @@ See [UPGRADE-3.0.md](UPGRADE-3.0.md) for migration details.
 - `BatchHttpClient::request()` now throws `InvalidArgumentException` if `RequestConfig::$options` contains the reserved `user_data` key.
 - `BatchHttpClient::fetch()` now throws `InvalidArgumentException` if a `retryOptions` Closure returns options containing `user_data`.
 
-See [UPGRADE-2.0.md](UPGRADE-2.0.md) for migration details.
+See [upgrade/2.0.md](upgrade/2.0.md) for migration details.
 
 ## [1.1.0] - 2026-04-20
 
