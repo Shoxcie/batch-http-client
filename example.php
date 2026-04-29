@@ -21,7 +21,7 @@ function simpleLog(
     string $url,
     float $duration,
     ?string $exceptionMessage = null,
-    ?int $attempt = null,
+    ?int $retries = null,
     ?int $statusCode = null,
     ?array $headers = null,
     ?string $body = null
@@ -40,8 +40,8 @@ function simpleLog(
         $parts[] = 'Exception => ' . explode(' for "', $exceptionMessage)[0];
     }
 
-    if (isset($attempt)) {
-        $parts[] = 'Attempt => ' . $attempt;
+    if (isset($retries)) {
+        $parts[] = 'Retries => ' . $retries;
     }
 
     if ($statusCode) {
@@ -59,27 +59,28 @@ function simpleLog(
     echo implode(' | ', $parts) . PHP_EOL . PHP_EOL;
 }
 
-function logSuccess(string $key, mixed $result, ResponseInterface $response): void
+function logSuccess(string $key, int $retries, mixed $result, ResponseInterface $response): void
 {
     simpleLog(
         prefix: 'SUCCESS',
         key: $key,
         url: get_url($response),
         duration: get_total_time($response),
+        retries: $retries,
         statusCode: get_status_code($response),
         headers: get_headers($response),
         body: get_content($response),
     );
 }
 
-function logRetry(string $key, int $attempt, ResponseInterface $response, ExceptionInterface|InvalidResponseException $e, ResponseInterface $retryResponse): void
+function logRetry(string $key, int $retries, ResponseInterface $response, ExceptionInterface|InvalidResponseException $e, ResponseInterface $retryResponse): void
 {
     simpleLog(
         prefix: 'RETRY',
         key: $key,
         url: get_url($response),
         duration: get_total_time($response),
-        attempt: $attempt,
+        retries: $retries,
         exceptionMessage: $e->getMessage(),
         statusCode: get_status_code($response),
         headers: get_headers($response),
@@ -87,13 +88,14 @@ function logRetry(string $key, int $attempt, ResponseInterface $response, Except
     );
 }
 
-function logExhausted(string $key, ResponseInterface $response, ExceptionInterface|InvalidResponseException $e): void
+function logExhausted(string $key, int $retries, ResponseInterface $response, ExceptionInterface|InvalidResponseException $e): void
 {
     simpleLog(
         prefix: 'EXHAUSTED',
         key: $key,
         url: get_url($response),
         duration: get_total_time($response),
+        retries: $retries,
         exceptionMessage: $e->getMessage(),
         statusCode: get_status_code($response),
         headers: get_headers($response),
@@ -101,13 +103,14 @@ function logExhausted(string $key, ResponseInterface $response, ExceptionInterfa
     );
 }
 
-function logAbort(string $key, ResponseInterface $response, Throwable $e): void
+function logAbort(string $key, int $retries, ResponseInterface $response, Throwable $e): void
 {
     simpleLog(
         prefix: 'ABORT',
         key: $key,
         url: get_url($response),
         duration: get_total_time($response),
+        retries: $retries,
         exceptionMessage: $e->getMessage(),
         statusCode: get_status_code($response),
         headers: get_headers($response),

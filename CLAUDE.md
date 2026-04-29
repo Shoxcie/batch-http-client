@@ -20,10 +20,10 @@ $results = $client
         'users'  => new RequestConfig('GET', 'https://api.example.com/users', maxRetries: 3),
         'orders' => new RequestConfig('POST', 'https://api.example.com/orders', options: ['json' => $data]),
     ])
-    ->onSuccess(function (string $key, mixed $result, ResponseInterface $response) { ... })
-    ->onRetry(function (string $key, int $attempt, ResponseInterface $failedResponse, ExceptionInterface|InvalidResponseException $e, ResponseInterface $retryResponse) { ... })
-    ->onExhausted(function (string $key, ResponseInterface $response, ExceptionInterface|InvalidResponseException $e) { ... })
-    ->onAbort(function (string $key, ResponseInterface $response, Throwable $e) { ... })
+    ->onSuccess(function (string $key, int $retries, mixed $result, ResponseInterface $response) { ... })
+    ->onRetry(function (string $key, int $retries, ResponseInterface $failedResponse, ExceptionInterface|InvalidResponseException $e, ResponseInterface $retryResponse) { ... })
+    ->onExhausted(function (string $key, int $retries, ResponseInterface $response, ExceptionInterface|InvalidResponseException $e) { ... })
+    ->onAbort(function (string $key, int $retries, ResponseInterface $response, Throwable $e) { ... })
     ->fetch();
 ```
 
@@ -34,7 +34,7 @@ $results = $client
   - `method` (string)
   - `url` (string)
   - `options` (array, default `[]`) — standard Symfony HttpClient options (timeout, max_duration, headers, etc.)
-  - `retryOptions` (array|Closure, default `[]`) — merged onto options for retries via `array_replace_recursive($options, $retryOptions)`. If Closure: receives `(int $attempt, Throwable $e)`, must return options array.
+  - `retryOptions` (array|Closure, default `[]`) — merged onto options for retries via `array_replace_recursive($options, $retryOptions)`. If Closure: receives `(int $retries, ExceptionInterface|InvalidResponseException $e)`, must return options array.
   - `throwOnExhausted` (bool, default `true`) — if true and request exhausts all retries, rethrow last exception and cancel all in-flight requests
   - `decodeJson` (bool, default `true`) — `true`: `toArray()`, `false`: `getContent()`
   - `maxRetries` (int, default `0`) — max retry count
@@ -57,10 +57,10 @@ Fires all HTTP requests immediately (Symfony HttpClient is async by default). St
 
 ### Callbacks
 
-- `onSuccess(Closure)` — called for each 2xx response after `parseResponse` (if any) returns: `(string $key, mixed $result, ResponseInterface $response)`. `$result` is the value stored in `$results[$key]` (post-`parseResponse` if configured).
-- `onRetry(Closure)` — called when a retry fires: `(string $key, int $attempt, ResponseInterface $failedResponse, ExceptionInterface|InvalidResponseException $e, ResponseInterface $retryResponse)`
-- `onExhausted(Closure)` — called when a single request exhausts all retries: `(string $key, ResponseInterface $response, ExceptionInterface|InvalidResponseException $e)`
-- `onAbort(Closure)` — called when an unexpected `Throwable` (not an `ExceptionInterface` or `InvalidResponseException`) cancels the whole batch — e.g. a `RuntimeException` from a user callback, or anything other than `InvalidResponseException` thrown from `parseResponse`: `(string $key, ResponseInterface $response, Throwable $e)`. Skipped if the throw happened before any response was processed.
+- `onSuccess(Closure)` — called for each 2xx response after `parseResponse` (if any) returns: `(string $key, int $retries, mixed $result, ResponseInterface $response)`. `$retries` is the number of retries before success (0 = first-attempt). `$result` is the value stored in `$results[$key]` (post-`parseResponse` if configured).
+- `onRetry(Closure)` — called when a retry fires: `(string $key, int $retries, ResponseInterface $failedResponse, ExceptionInterface|InvalidResponseException $e, ResponseInterface $retryResponse)`. `$retries` is the retry count after this retry fired (always ≥ 1).
+- `onExhausted(Closure)` — called when a single request exhausts all retries: `(string $key, int $retries, ResponseInterface $response, ExceptionInterface|InvalidResponseException $e)`. `$retries` equals `maxRetries` on normal exhaustion; less when a transport error short-circuits with `retryOnTransportException: false`.
+- `onAbort(Closure)` — called when an unexpected `Throwable` (not an `ExceptionInterface` or `InvalidResponseException`) cancels the whole batch — e.g. a `RuntimeException` from a user callback, or anything other than `InvalidResponseException` thrown from `parseResponse`: `(string $key, int $retries, ResponseInterface $response, Throwable $e)`. `$retries` is the retry count for the request being processed when the abort fired. Skipped if the throw happened before any response was processed.
 
 ### Retry behavior
 
@@ -70,7 +70,7 @@ Fires all HTTP requests immediately (Symfony HttpClient is async by default). St
 - A `parseResponse` closure throwing `InvalidResponseException` triggers a retry (counts against `maxRetries`, fires `onRetry`/`onExhausted`)
 - Retries fire immediately (no backoff delay)
 - Retry requests use `array_replace_recursive($options, $retryOptions)` for options
-- `retryOptions` can be a Closure receiving `(int $attempt, Throwable $e)` for dynamic retry configuration
+- `retryOptions` can be a Closure receiving `(int $retries, ExceptionInterface|InvalidResponseException $e)` for dynamic retry configuration
 - Each request retries independently without blocking others
 - `$response->cancel()` called on transport errors before retry to free the broken socket
 

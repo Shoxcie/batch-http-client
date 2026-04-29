@@ -29,16 +29,16 @@ final class BatchHttpClient
     /** @var array<string, mixed> */
     private array $results = [];
 
-    /** @var null|Closure(string, mixed, ResponseInterface): void */
+    /** @var null|Closure(string, int, mixed, ResponseInterface): void */
     private ?Closure $onSuccess = null;
 
     /** @var null|Closure(string, int, ResponseInterface, ExceptionInterface|InvalidResponseException, ResponseInterface): void */
     private ?Closure $onRetry = null;
 
-    /** @var null|Closure(string, ResponseInterface, ExceptionInterface|InvalidResponseException): void */
+    /** @var null|Closure(string, int, ResponseInterface, ExceptionInterface|InvalidResponseException): void */
     private ?Closure $onExhausted = null;
 
-    /** @var null|Closure(string, ResponseInterface, Throwable): void */
+    /** @var null|Closure(string, int, ResponseInterface, Throwable): void */
     private ?Closure $onAbort = null;
 
     public function __construct(
@@ -77,7 +77,7 @@ final class BatchHttpClient
         return $this;
     }
 
-    /** @param Closure(string, mixed, ResponseInterface): void $closure */
+    /** @param Closure(string, int, mixed, ResponseInterface): void $closure */
     public function onSuccess(Closure $closure): static
     {
         $this->onSuccess = $closure;
@@ -93,7 +93,7 @@ final class BatchHttpClient
         return $this;
     }
 
-    /** @param Closure(string, ResponseInterface, ExceptionInterface|InvalidResponseException): void $closure */
+    /** @param Closure(string, int, ResponseInterface, ExceptionInterface|InvalidResponseException): void $closure */
     public function onExhausted(Closure $closure): static
     {
         $this->onExhausted = $closure;
@@ -101,7 +101,7 @@ final class BatchHttpClient
         return $this;
     }
 
-    /** @param Closure(string, ResponseInterface, Throwable): void $closure */
+    /** @param Closure(string, int, ResponseInterface, Throwable): void $closure */
     public function onAbort(Closure $closure): static
     {
         $this->onAbort = $closure;
@@ -140,7 +140,7 @@ final class BatchHttpClient
                             $this->results[$key] = $result;
 
                             if ($this->onSuccess instanceof Closure) {
-                                ($this->onSuccess)($key, $result, $response);
+                                ($this->onSuccess)($key, $this->retriesCount[$key], $result, $response);
                             }
 
                             unset($this->responses[$key]);
@@ -165,7 +165,7 @@ final class BatchHttpClient
             if (isset($response) && $this->onAbort instanceof Closure) {
                 $key = $this->getKey($response);
 
-                ($this->onAbort)($key, $response, $e);
+                ($this->onAbort)($key, $this->retriesCount[$key], $response, $e);
             }
 
             throw $e;
@@ -201,7 +201,7 @@ final class BatchHttpClient
         }
 
         if ($this->onExhausted instanceof Closure) {
-            ($this->onExhausted)($key, $response, $e);
+            ($this->onExhausted)($key, $this->retriesCount[$key], $response, $e);
         }
 
         if ($config->throwOnExhausted) {

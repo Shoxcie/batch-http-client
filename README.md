@@ -66,8 +66,8 @@ Or dynamically with a Closure:
 ```php
 new RequestConfig('GET', 'https://api.example.com/resource',
     maxRetries: 3,
-    retryOptions: function (int $attempt, Throwable $e): array {
-        return ['timeout' => 10 * $attempt];
+    retryOptions: function (int $retries, ExceptionInterface|InvalidResponseException $e): array {
+        return ['timeout' => 10 * $retries];
     },
 )
 ```
@@ -79,17 +79,20 @@ Retry options are merged onto the original options via `array_replace_recursive(
 ```php
 $results = $client
     ->request([...])
-    ->onSuccess(function (string $key, mixed $result, ResponseInterface $response) {
+    ->onSuccess(function (string $key, int $retries, mixed $result, ResponseInterface $response) {
         // called for each 2xx response, after parseResponse if configured
+        // $retries = 0 on first-attempt success, N on success after N retries
     })
-    ->onRetry(function (string $key, int $attempt, ResponseInterface $failedResponse, ExceptionInterface|InvalidResponseException $e, ResponseInterface $retryResponse) {
-        // called when a retry fires
+    ->onRetry(function (string $key, int $retries, ResponseInterface $failedResponse, ExceptionInterface|InvalidResponseException $e, ResponseInterface $retryResponse) {
+        // called when a retry fires; $retries is the retry count after this retry fired (always >= 1)
     })
-    ->onExhausted(function (string $key, ResponseInterface $response, ExceptionInterface|InvalidResponseException $e) {
+    ->onExhausted(function (string $key, int $retries, ResponseInterface $response, ExceptionInterface|InvalidResponseException $e) {
         // called when a single request exhausts all retries
+        // $retries equals maxRetries normally; less when a transport error short-circuits
     })
-    ->onAbort(function (string $key, ResponseInterface $response, Throwable $e) {
-        // called when an unexpected exception (broken JSON, throwing callback, ...) cancels the whole batch
+    ->onAbort(function (string $key, int $retries, ResponseInterface $response, Throwable $e) {
+        // called when an unexpected exception (e.g. throwing user callback) cancels the whole batch
+        // $retries is the retry count for the request being processed when the abort fired
     })
     ->fetch();
 ```
@@ -175,7 +178,7 @@ $client = new BatchHttpClient($httpClient);
 | `method` | `string` | *(required)* | HTTP method |
 | `url` | `string` | *(required)* | Request URL |
 | `options` | `array` | `[]` | Symfony HttpClient [options](https://symfony.com/doc/current/http_client.html#configuration) |
-| `retryOptions` | `array\|Closure` | `[]` | Options merged on retry, or Closure receiving `(int $attempt, Throwable $e)` |
+| `retryOptions` | `array\|Closure` | `[]` | Options merged on retry, or Closure receiving `(int $retries, ExceptionInterface\|InvalidResponseException $e)` |
 | `throwOnExhausted` | `bool` | `true` | Rethrow exception after retries exhausted |
 | `decodeJson` | `bool` | `true` | Decode response as JSON |
 | `maxRetries` | `int` | `0` | Maximum retry attempts |
