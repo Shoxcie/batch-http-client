@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.0.0] - 2026-04-29
+
+### Changed
+
+- `BatchHttpClient::onSuccess()` callback signature is now `Closure(string $key, mixed $result, ResponseInterface $response): void` (previously `Closure(string $key, ResponseInterface $response): void`). The `$result` is the value stored in `$results[$key]` — i.e. post-`parseResponse` if one is configured. Not contravariant: existing closures must add the `$result` parameter.
+
+See [UPGRADE-4.0.md](UPGRADE-4.0.md) for migration details.
+
 ## [3.1.0] - 2026-04-28
 
 ### Added

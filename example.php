@@ -60,7 +60,7 @@ function simpleLog(
     echo implode(' | ', $parts) . PHP_EOL . PHP_EOL;
 }
 
-function logSuccess(string $key, ResponseInterface $response): void
+function logSuccess(string $key, mixed $result, ResponseInterface $response): void
 {
     simpleLog(
         prefix: 'SUCCESS',

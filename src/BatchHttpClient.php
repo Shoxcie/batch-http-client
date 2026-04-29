@@ -29,7 +29,7 @@ final class BatchHttpClient
     /** @var array<string, mixed> */
     private array $results = [];
 
-    /** @var null|Closure(string, ResponseInterface): void */
+    /** @var null|Closure(string, mixed, ResponseInterface): void */
     private ?Closure $onSuccess = null;
 
     /** @var null|Closure(string, int, ResponseInterface, TransportExceptionInterface|HttpExceptionInterface|InvalidResponseException, ResponseInterface): void */
@@ -77,7 +77,7 @@ final class BatchHttpClient
         return $this;
     }
 
-    /** @param Closure(string, ResponseInterface): void $closure */
+    /** @param Closure(string, mixed, ResponseInterface): void $closure */
     public function onSuccess(Closure $closure): static
     {
         $this->onSuccess = $closure;
@@ -140,7 +140,7 @@ final class BatchHttpClient
                             $this->results[$key] = $result;
 
                             if ($this->onSuccess instanceof Closure) {
-                                ($this->onSuccess)($key, $response);
+                                ($this->onSuccess)($key, $result, $response);
                             }
 
                             unset($this->responses[$key]);

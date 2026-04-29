@@ -20,7 +20,7 @@ $results = $client
         'users'  => new RequestConfig('GET', 'https://api.example.com/users', maxRetries: 3),
         'orders' => new RequestConfig('POST', 'https://api.example.com/orders', options: ['json' => $data]),
     ])
-    ->onSuccess(function (string $key, ResponseInterface $response) { ... })
+    ->onSuccess(function (string $key, mixed $result, ResponseInterface $response) { ... })
     ->onRetry(function (string $key, int $attempt, ResponseInterface $failedResponse, TransportExceptionInterface|HttpExceptionInterface|InvalidResponseException $e, ResponseInterface $retryResponse) { ... })
     ->onExhausted(function (string $key, ResponseInterface $response, TransportExceptionInterface|HttpExceptionInterface|InvalidResponseException $e) { ... })
     ->onAbort(function (string $key, ResponseInterface $response, Throwable $e) { ... })
@@ -57,7 +57,7 @@ Fires all HTTP requests immediately (Symfony HttpClient is async by default). St
 
 ### Callbacks
 
-- `onSuccess(Closure)` — called for each 2xx response after `parseResponse` (if any) returns: `(string $key, ResponseInterface $response)`
+- `onSuccess(Closure)` — called for each 2xx response after `parseResponse` (if any) returns: `(string $key, mixed $result, ResponseInterface $response)`. `$result` is the value stored in `$results[$key]` (post-`parseResponse` if configured).
 - `onRetry(Closure)` — called when a retry fires: `(string $key, int $attempt, ResponseInterface $failedResponse, TransportExceptionInterface|HttpExceptionInterface|InvalidResponseException $e, ResponseInterface $retryResponse)`
 - `onExhausted(Closure)` — called when a single request exhausts all retries: `(string $key, ResponseInterface $response, TransportExceptionInterface|HttpExceptionInterface|InvalidResponseException $e)`
 - `onAbort(Closure)` — called when an unexpected exception cancels the whole batch (broken JSON, throwing user callback, parser throwing something other than `InvalidResponseException`, etc.): `(string $key, ResponseInterface $response, Throwable $e)`. Skipped if the throw happened before any response was processed.

@@ -79,8 +79,8 @@ Retry options are merged onto the original options via `array_replace_recursive(
 ```php
 $results = $client
     ->request([...])
-    ->onSuccess(function (string $key, ResponseInterface $response) {
-        // called for each 2xx response
+    ->onSuccess(function (string $key, mixed $result, ResponseInterface $response) {
+        // called for each 2xx response, after parseResponse if configured
     })
     ->onRetry(function (string $key, int $attempt, ResponseInterface $failedResponse, TransportExceptionInterface|HttpExceptionInterface|InvalidResponseException $e, ResponseInterface $retryResponse) {
         // called when a retry fires

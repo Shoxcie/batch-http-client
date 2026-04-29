@@ -465,7 +465,7 @@ describe('retryOnTransportException', function (): void {
 });
 
 describe('callbacks', function (): void {
-    test('onSuccess receives key and response', function (): void {
+    test('onSuccess receives key, result, and response', function (): void {
         $captured = [];
 
         $mockClient = new MockHttpClient([
@@ -478,15 +478,17 @@ describe('callbacks', function (): void {
                 'users' => new RequestConfig('GET', 'https://api.example.com/users'),
                 'orders' => new RequestConfig('GET', 'https://api.example.com/orders'),
             ])
-            ->onSuccess(function (string $key, ResponseInterface $response) use (&$captured): void {
-                $captured[] = ['key' => $key, 'response' => $response];
+            ->onSuccess(function (string $key, mixed $result, ResponseInterface $response) use (&$captured): void {
+                $captured[] = ['key' => $key, 'result' => $result, 'response' => $response];
             })
             ->fetch();
 
         expect($captured)->toHaveCount(2)
             ->and($captured[0]['key'])->toBe('users')
+            ->and($captured[0]['result'])->toBe(['id' => 1])
             ->and($captured[0]['response'])->toBeInstanceOf(ResponseInterface::class)
             ->and($captured[1]['key'])->toBe('orders')
+            ->and($captured[1]['result'])->toBe(['id' => 2])
             ->and($captured[1]['response'])->toBeInstanceOf(ResponseInterface::class);
     });
 
@@ -921,7 +923,7 @@ describe('safety-net catch', function (): void {
                 ->request([
                     'api' => new RequestConfig('GET', 'https://api.example.com/api'),
                 ])
-                ->onSuccess(function (string $key, ResponseInterface $response): void {
+                ->onSuccess(function (string $key, mixed $result, ResponseInterface $response): void {
                     throw new \RuntimeException('boom');
                 })
                 ->fetch(),
@@ -942,7 +944,7 @@ describe('safety-net catch', function (): void {
                     'b' => new RequestConfig('GET', 'https://api.example.com/b', maxRetries: 3),
                     'c' => new RequestConfig('GET', 'https://api.example.com/c', maxRetries: 3),
                 ])
-                ->onSuccess(function (string $key, ResponseInterface $response): void {
+                ->onSuccess(function (string $key, mixed $result, ResponseInterface $response): void {
                     throw new \RuntimeException('boom');
                 })
                 ->fetch(),
@@ -969,6 +971,29 @@ describe('parseResponse', function (): void {
             ->fetch();
 
         expect($results['api'])->toBe(['id' => 1, 'name' => 'Alice']);
+    });
+
+    test('onSuccess receives the parseResponse-transformed result, not the raw decoded body', function (): void {
+        $captured = null;
+
+        $mockClient = new MockHttpClient([
+            new JsonMockResponse(['data' => ['id' => 42], 'meta' => ['v' => 1]]),
+        ]);
+
+        new BatchHttpClient($mockClient)
+            ->request([
+                'api' => new RequestConfig(
+                    'GET',
+                    'https://api.example.com/api',
+                    parseResponse: fn(string $key, mixed $result, ResponseInterface $response): mixed => $result['data'],
+                ),
+            ])
+            ->onSuccess(function (string $key, mixed $result, ResponseInterface $response) use (&$captured): void {
+                $captured = $result;
+            })
+            ->fetch();
+
+        expect($captured)->toBe(['id' => 42]);
     });
 
     test('receives key, decoded result, and response', function (): void {
