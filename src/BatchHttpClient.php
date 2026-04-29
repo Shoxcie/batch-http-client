@@ -227,7 +227,7 @@ final class BatchHttpClient
         ++$this->retriesCount[$key];
 
         if ($config->retryOptions instanceof Closure) {
-            $retryOptions = ($config->retryOptions)($this->retriesCount[$key], $e);
+            $retryOptions = ($config->retryOptions)($key, $this->retriesCount[$key], $e);
 
         } else {
             $retryOptions = $config->retryOptions;

@@ -15,7 +15,7 @@ final readonly class RequestConfig
         public string         $url,
         /** @var array<string, mixed> */
         public array          $options = [],
-        /** @var array<string, mixed>|Closure(int, ExceptionInterface|InvalidResponseException): array<string, mixed> */
+        /** @var array<string, mixed>|Closure(string, int, ExceptionInterface|InvalidResponseException): array<string, mixed> */
         public array|Closure  $retryOptions = [],
         public bool           $throwOnExhausted = true,
         public bool           $decodeJson = true,

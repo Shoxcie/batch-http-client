@@ -34,7 +34,7 @@ $results = $client
   - `method` (string)
   - `url` (string)
   - `options` (array, default `[]`) — standard Symfony HttpClient options (timeout, max_duration, headers, etc.)
-  - `retryOptions` (array|Closure, default `[]`) — merged onto options for retries via `array_replace_recursive($options, $retryOptions)`. If Closure: receives `(int $retries, ExceptionInterface|InvalidResponseException $e)`, must return options array.
+  - `retryOptions` (array|Closure, default `[]`) — merged onto options for retries via `array_replace_recursive($options, $retryOptions)`. If Closure: receives `(string $key, int $retries, ExceptionInterface|InvalidResponseException $e)`, must return options array.
   - `throwOnExhausted` (bool, default `true`) — if true and request exhausts all retries, rethrow last exception and cancel all in-flight requests
   - `decodeJson` (bool, default `true`) — `true`: `toArray()`, `false`: `getContent()`
   - `maxRetries` (int, default `0`) — max retry count
@@ -70,7 +70,7 @@ Fires all HTTP requests immediately (Symfony HttpClient is async by default). St
 - A `parseResponse` closure throwing `InvalidResponseException` triggers a retry (counts against `maxRetries`, fires `onRetry`/`onExhausted`)
 - Retries fire immediately (no backoff delay)
 - Retry requests use `array_replace_recursive($options, $retryOptions)` for options
-- `retryOptions` can be a Closure receiving `(int $retries, ExceptionInterface|InvalidResponseException $e)` for dynamic retry configuration
+- `retryOptions` can be a Closure receiving `(string $key, int $retries, ExceptionInterface|InvalidResponseException $e)` for dynamic retry configuration
 - Each request retries independently without blocking others
 - `$response->cancel()` called on transport errors before retry to free the broken socket
 

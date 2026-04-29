@@ -849,7 +849,7 @@ describe('retryOptions merging', function (): void {
 });
 
 describe('retryOptions as Closure', function (): void {
-    test('closure receives attempt number and exception', function (): void {
+    test('closure receives key, attempt number, and exception', function (): void {
         $captured = [];
         $callCount = 0;
 
@@ -870,8 +870,8 @@ describe('retryOptions as Closure', function (): void {
                 'api' => new RequestConfig(
                     'GET',
                     'https://api.example.com/api',
-                    retryOptions: function (int $retries, \Throwable $e) use (&$captured): array {
-                        $captured[] = ['retries' => $retries, 'exception' => $e];
+                    retryOptions: function (string $key, int $retries, \Throwable $e) use (&$captured): array {
+                        $captured[] = ['key' => $key, 'retries' => $retries, 'exception' => $e];
 
                         return [];
                     },
@@ -881,8 +881,10 @@ describe('retryOptions as Closure', function (): void {
             ->fetch();
 
         expect($captured)->toHaveCount(2)
+            ->and($captured[0]['key'])->toBe('api')
             ->and($captured[0]['retries'])->toBe(1)
             ->and($captured[0]['exception'])->toBeInstanceOf(ExceptionInterface::class)
+            ->and($captured[1]['key'])->toBe('api')
             ->and($captured[1]['retries'])->toBe(2)
             ->and($captured[1]['exception'])->toBeInstanceOf(ExceptionInterface::class);
     });
@@ -909,7 +911,7 @@ describe('retryOptions as Closure', function (): void {
                 'api' => new RequestConfig(
                     'GET',
                     'https://api.example.com/api',
-                    retryOptions: fn(int $retries, \Throwable $e): array => ['headers' => ['X-Attempt' => '1']],
+                    retryOptions: fn(string $key, int $retries, \Throwable $e): array => ['headers' => ['X-Attempt' => '1']],
                     maxRetries: 1,
                 ),
             ])
@@ -941,7 +943,7 @@ describe('retryOptions as Closure', function (): void {
                 'api' => new RequestConfig(
                     'GET',
                     'https://api.example.com/api',
-                    retryOptions: fn(int $retries, \Throwable $e): array => ['headers' => ['X-Attempt' => (string) $retries]],
+                    retryOptions: fn(string $key, int $retries, \Throwable $e): array => ['headers' => ['X-Attempt' => (string) $retries]],
                     maxRetries: 2,
                 ),
             ])
@@ -949,6 +951,53 @@ describe('retryOptions as Closure', function (): void {
 
         expect($capturedHeaders[1]['x-attempt'])->toBe(['X-Attempt: 1'])
             ->and($capturedHeaders[2]['x-attempt'])->toBe(['X-Attempt: 2']);
+    });
+
+    test('closure shared across requests sees each key', function (): void {
+        $captured = [];
+        $callCounts = ['users' => 0, 'orders' => 0];
+
+        $mockClient = new MockHttpClient(
+            function (string $method, string $url) use (&$callCounts): JsonMockResponse {
+                $endpoint = str_contains($url, '/users') ? 'users' : 'orders';
+                ++$callCounts[$endpoint];
+
+                if ($callCounts[$endpoint] === 1) {
+                    return new JsonMockResponse([], ['http_code' => 500]);
+                }
+
+                return new JsonMockResponse(['ok' => true]);
+            },
+        );
+
+        $sharedRetryOptions = function (string $key, int $retries, \Throwable $e) use (&$captured): array {
+            $captured[] = ['key' => $key, 'retries' => $retries];
+
+            return [];
+        };
+
+        new BatchHttpClient($mockClient)
+            ->request([
+                'users' => new RequestConfig(
+                    'GET',
+                    'https://api.example.com/users',
+                    retryOptions: $sharedRetryOptions,
+                    maxRetries: 1,
+                ),
+                'orders' => new RequestConfig(
+                    'GET',
+                    'https://api.example.com/orders',
+                    retryOptions: $sharedRetryOptions,
+                    maxRetries: 1,
+                ),
+            ])
+            ->fetch();
+
+        $keysSeen = array_column($captured, 'key');
+        sort($keysSeen);
+
+        expect($captured)->toHaveCount(2)
+            ->and($keysSeen)->toBe(['orders', 'users']);
     });
 });
 
@@ -983,7 +1032,7 @@ describe('user_data rejection', function (): void {
                     'api' => new RequestConfig(
                         'GET',
                         'https://api.example.com/api',
-                        retryOptions: fn(int $retries, \Throwable $e): array => ['user_data' => 'nope'],
+                        retryOptions: fn(string $key, int $retries, \Throwable $e): array => ['user_data' => 'nope'],
                         maxRetries: 1,
                     ),
                 ])

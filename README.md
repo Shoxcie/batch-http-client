@@ -66,7 +66,7 @@ Or dynamically with a Closure:
 ```php
 new RequestConfig('GET', 'https://api.example.com/resource',
     maxRetries: 3,
-    retryOptions: function (int $retries, ExceptionInterface|InvalidResponseException $e): array {
+    retryOptions: function (string $key, int $retries, ExceptionInterface|InvalidResponseException $e): array {
         return ['timeout' => 10 * $retries];
     },
 )
@@ -178,7 +178,7 @@ $client = new BatchHttpClient($httpClient);
 | `method` | `string` | *(required)* | HTTP method |
 | `url` | `string` | *(required)* | Request URL |
 | `options` | `array` | `[]` | Symfony HttpClient [options](https://symfony.com/doc/current/http_client.html#configuration) |
-| `retryOptions` | `array\|Closure` | `[]` | Options merged on retry, or Closure receiving `(int $retries, ExceptionInterface\|InvalidResponseException $e)` |
+| `retryOptions` | `array\|Closure` | `[]` | Options merged on retry, or Closure receiving `(string $key, int $retries, ExceptionInterface\|InvalidResponseException $e)` |
 | `throwOnExhausted` | `bool` | `true` | Rethrow exception after retries exhausted |
 | `decodeJson` | `bool` | `true` | Decode response as JSON |
 | `maxRetries` | `int` | `0` | Maximum retry attempts |
