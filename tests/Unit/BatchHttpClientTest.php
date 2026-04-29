@@ -1131,7 +1131,7 @@ describe('parseResponse', function (): void {
                 'api' => new RequestConfig(
                     'GET',
                     'https://api.example.com/api',
-                    parseResponse: fn(string $key, mixed $result, ResponseInterface $response): mixed => $result['data'],
+                    parseResponse: fn(string $key, int $retries, mixed $result, ResponseInterface $response): mixed => $result['data'],
                 ),
             ])
             ->fetch();
@@ -1151,7 +1151,7 @@ describe('parseResponse', function (): void {
                 'api' => new RequestConfig(
                     'GET',
                     'https://api.example.com/api',
-                    parseResponse: fn(string $key, mixed $result, ResponseInterface $response): mixed => $result['data'],
+                    parseResponse: fn(string $key, int $retries, mixed $result, ResponseInterface $response): mixed => $result['data'],
                 ),
             ])
             ->onSuccess(function (string $key, int $retries, mixed $result, ResponseInterface $response) use (&$captured): void {
@@ -1174,8 +1174,8 @@ describe('parseResponse', function (): void {
                 'api' => new RequestConfig(
                     'GET',
                     'https://api.example.com/api',
-                    parseResponse: function (string $key, mixed $result, ResponseInterface $response) use (&$captured): mixed {
-                        $captured = ['key' => $key, 'result' => $result, 'response' => $response];
+                    parseResponse: function (string $key, int $retries, mixed $result, ResponseInterface $response) use (&$captured): mixed {
+                        $captured = ['key' => $key, 'retries' => $retries, 'result' => $result, 'response' => $response];
 
                         return $result;
                     },
@@ -1184,6 +1184,7 @@ describe('parseResponse', function (): void {
             ->fetch();
 
         expect($captured['key'])->toBe('api')
+            ->and($captured['retries'])->toBe(0)
             ->and($captured['result'])->toBe(['id' => 7])
             ->and($captured['response'])->toBeInstanceOf(ResponseInterface::class);
     });
@@ -1201,7 +1202,7 @@ describe('parseResponse', function (): void {
                     'GET',
                     'https://api.example.com/api',
                     decodeJson: false,
-                    parseResponse: function (string $key, mixed $result, ResponseInterface $response) use (&$captured): mixed {
+                    parseResponse: function (string $key, int $retries, mixed $result, ResponseInterface $response) use (&$captured): mixed {
                         $captured = $result;
 
                         return $result;
@@ -1213,9 +1214,34 @@ describe('parseResponse', function (): void {
         expect($captured)->toBe('plain body');
     });
 
+    test('receives $retries === 0 on first-attempt success', function (): void {
+        $captured = null;
+
+        $mockClient = new MockHttpClient([
+            new JsonMockResponse(['ok' => true]),
+        ]);
+
+        new BatchHttpClient($mockClient)
+            ->request([
+                'api' => new RequestConfig(
+                    'GET',
+                    'https://api.example.com/api',
+                    parseResponse: function (string $key, int $retries, mixed $result) use (&$captured): mixed {
+                        $captured = $retries;
+
+                        return $result;
+                    },
+                ),
+            ])
+            ->fetch();
+
+        expect($captured)->toBe(0);
+    });
+
     test('throwing InvalidResponseException triggers retry', function (): void {
         $callCount = 0;
         $retryCalls = [];
+        $parseRetries = [];
 
         $mockClient = new MockHttpClient(
             function () use (&$callCount): JsonMockResponse {
@@ -1231,7 +1257,9 @@ describe('parseResponse', function (): void {
                     'GET',
                     'https://api.example.com/api',
                     maxRetries: 2,
-                    parseResponse: function (string $key, mixed $result): mixed {
+                    parseResponse: function (string $key, int $retries, mixed $result) use (&$parseRetries): mixed {
+                        $parseRetries[] = $retries;
+
                         if ($result['attempt'] < 2) {
                             throw new InvalidResponseException('not ready');
                         }
@@ -1247,6 +1275,7 @@ describe('parseResponse', function (): void {
 
         expect($mockClient->getRequestsCount())->toBe(2)
             ->and($results['api'])->toBe(['attempt' => 2])
+            ->and($parseRetries)->toBe([0, 1])
             ->and($retryCalls)->toHaveCount(1)
             ->and($retryCalls[0]['key'])->toBe('api')
             ->and($retryCalls[0]['retries'])->toBe(1)
@@ -1375,6 +1404,7 @@ describe('parseResponse', function (): void {
 
     test('only the failing request retries when one request validates and another does not', function (): void {
         $callCounts = ['ok' => 0, 'flaky' => 0];
+        $flakyParseRetries = [];
 
         $mockClient = new MockHttpClient(
             function (string $method, string $url) use (&$callCounts): JsonMockResponse {
@@ -1397,7 +1427,9 @@ describe('parseResponse', function (): void {
                     'GET',
                     'https://api.example.com/flaky',
                     maxRetries: 2,
-                    parseResponse: function (string $key, mixed $result): mixed {
+                    parseResponse: function (string $key, int $retries, mixed $result) use (&$flakyParseRetries): mixed {
+                        $flakyParseRetries[] = $retries;
+
                         if ($result['attempt'] < 2) {
                             throw new InvalidResponseException('retry me');
                         }
@@ -1410,6 +1442,7 @@ describe('parseResponse', function (): void {
 
         expect($callCounts['ok'])->toBe(1)
             ->and($callCounts['flaky'])->toBe(2)
+            ->and($flakyParseRetries)->toBe([0, 1])
             ->and($results['ok'])->toBe(['fine' => true])
             ->and($results['flaky'])->toBe(['attempt' => 2]);
     });

@@ -21,7 +21,7 @@ final readonly class RequestConfig
         public bool           $decodeJson = true,
         public int            $maxRetries = 0,
         public bool           $retryOnTransportException = true,
-        /** @var null|Closure(string, mixed, ResponseInterface): mixed */
+        /** @var null|Closure(string, int, mixed, ResponseInterface): mixed */
         public ?Closure       $parseResponse = null,
     ) {}
 }

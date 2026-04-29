@@ -39,7 +39,7 @@ $results = $client
   - `decodeJson` (bool, default `true`) — `true`: `toArray()`, `false`: `getContent()`
   - `maxRetries` (int, default `0`) — max retry count
   - `retryOnTransportException` (bool, default `true`) — whether to retry on Symfony transport exceptions (connection timeouts, DNS failures, etc.)
-  - `parseResponse` (Closure|null, default `null`) — runs after the body is decoded and before `onSuccess`, only on a 2xx response. Receives `(string $key, mixed $result, ResponseInterface $response)` and returns the value to store in `$results[$key]`. Throwing `InvalidResponseException` triggers a retry just like an HTTP/transport failure (counts against `maxRetries`, fires `onRetry`, and on exhaustion fires `onExhausted` + rethrows if `throwOnExhausted: true`).
+  - `parseResponse` (Closure|null, default `null`) — runs after the body is decoded and before `onSuccess`, only on a 2xx response. Receives `(string $key, int $retries, mixed $result, ResponseInterface $response)` and returns the value to store in `$results[$key]`. `$retries` is the number of retries that happened before this parse attempt (0 on first attempt) — the same value `onSuccess` sees on a successful parse. Throwing `InvalidResponseException` triggers a retry just like an HTTP/transport failure (counts against `maxRetries`, fires `onRetry`, and on exhaustion fires `onExhausted` + rethrows if `throwOnExhausted: true`).
 - `InvalidResponseException` — marker `RuntimeException` thrown from a `parseResponse` closure to reject a semantically invalid 2xx response and request a retry.
 
 ### `request(array<string, RequestConfig>)` — fire all requests, return `static`

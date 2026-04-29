@@ -134,7 +134,7 @@ final class BatchHttpClient
                             $result = $config->decodeJson ? $response->toArray() : $response->getContent();
 
                             if ($config->parseResponse instanceof Closure) {
-                                $result = ($config->parseResponse)($key, $result, $response);
+                                $result = ($config->parseResponse)($key, $this->retriesCount[$key], $result, $response);
                             }
 
                             $this->results[$key] = $result;

@@ -183,7 +183,7 @@ $client = new BatchHttpClient($httpClient);
 | `decodeJson` | `bool` | `true` | Decode response as JSON |
 | `maxRetries` | `int` | `0` | Maximum retry attempts |
 | `retryOnTransportException` | `bool` | `true` | Retry on transport errors (timeouts, DNS) |
-| `parseResponse` | `Closure\|null` | `null` | Runs on 2xx responses before `onSuccess`. Receives `(string $key, mixed $result, ResponseInterface $response)`; return value replaces the result. Throw `InvalidResponseException` to retry. |
+| `parseResponse` | `Closure\|null` | `null` | Runs on 2xx responses before `onSuccess`. Receives `(string $key, int $retries, mixed $result, ResponseInterface $response)`; return value replaces the result. Throw `InvalidResponseException` to retry. |
 
 > [!IMPORTANT]
 > The `user_data` option is reserved for internal key correlation — passing it in `options` or `retryOptions` throws `InvalidArgumentException`.
