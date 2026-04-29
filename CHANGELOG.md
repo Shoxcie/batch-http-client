@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `BatchHttpClient::onSuccess()` callback signature is now `Closure(string $key, mixed $result, ResponseInterface $response): void` (previously `Closure(string $key, ResponseInterface $response): void`). The `$result` is the value stored in `$results[$key]` — i.e. post-`parseResponse` if one is configured. Not contravariant: existing closures must add the `$result` parameter.
 
-See [UPGRADE-4.0.md](UPGRADE-4.0.md) for migration details.
+See [upgrade/4.0.md](upgrade/4.0.md) for migration details.
 
 ## [3.1.0] - 2026-04-28
 
@@ -31,7 +31,7 @@ See [UPGRADE-4.0.md](UPGRADE-4.0.md) for migration details.
 
 - `BatchHttpClient::onFailure(Closure)` (deprecated in 2.1.0). Replace with `onExhausted()` for the retries-exhausted path and/or `onAbort()` for the unexpected-abort path.
 
-See [UPGRADE-3.0.md](UPGRADE-3.0.md) for migration details.
+See [upgrade/3.0.md](upgrade/3.0.md) for migration details.
 
 ## [2.1.0] - 2026-04-22
 
@@ -56,7 +56,7 @@ See [UPGRADE-3.0.md](UPGRADE-3.0.md) for migration details.
 - `BatchHttpClient::request()` now throws `InvalidArgumentException` if `RequestConfig::$options` contains the reserved `user_data` key.
 - `BatchHttpClient::fetch()` now throws `InvalidArgumentException` if a `retryOptions` Closure returns options containing `user_data`.
 
-See [UPGRADE-2.0.md](UPGRADE-2.0.md) for migration details.
+See [upgrade/2.0.md](upgrade/2.0.md) for migration details.
 
 ## [1.1.0] - 2026-04-20
 

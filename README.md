@@ -187,7 +187,7 @@ $client = new BatchHttpClient($httpClient);
 
 ## Upgrading
 
-See [UPGRADE-2.0.md](UPGRADE-2.0.md) for the `1.x` → `2.x` migration guide.
+See the [upgrade/](upgrade/) folder for migration guides between major versions.
 
 ## License
 
