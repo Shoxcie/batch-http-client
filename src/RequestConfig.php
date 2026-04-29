@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace Shoxcie\BatchHttpClient;
 
 use Closure;
+use Symfony\Contracts\HttpClient\Exception\ExceptionInterface;
 use Symfony\Contracts\HttpClient\ResponseInterface;
-use Throwable;
 
 final readonly class RequestConfig
 {
@@ -15,13 +15,13 @@ final readonly class RequestConfig
         public string         $url,
         /** @var array<string, mixed> */
         public array          $options = [],
-        /** @var array<string, mixed>|Closure(int, Throwable): array<string, mixed> */
+        /** @var array<string, mixed>|Closure(string, int, ExceptionInterface|InvalidResponseException): array<string, mixed> */
         public array|Closure  $retryOptions = [],
-        public bool           $throwOnError = true,
+        public bool           $throwOnExhausted = true,
         public bool           $decodeJson = true,
         public int            $maxRetries = 0,
         public bool           $retryOnTransportException = true,
-        /** @var null|Closure(string, mixed, ResponseInterface): mixed */
+        /** @var null|Closure(string, int, mixed, ResponseInterface): mixed */
         public ?Closure       $parseResponse = null,
     ) {}
 }
