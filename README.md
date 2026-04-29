@@ -82,10 +82,10 @@ $results = $client
     ->onSuccess(function (string $key, mixed $result, ResponseInterface $response) {
         // called for each 2xx response, after parseResponse if configured
     })
-    ->onRetry(function (string $key, int $attempt, ResponseInterface $failedResponse, TransportExceptionInterface|HttpExceptionInterface|InvalidResponseException $e, ResponseInterface $retryResponse) {
+    ->onRetry(function (string $key, int $attempt, ResponseInterface $failedResponse, ExceptionInterface|InvalidResponseException $e, ResponseInterface $retryResponse) {
         // called when a retry fires
     })
-    ->onExhausted(function (string $key, ResponseInterface $response, TransportExceptionInterface|HttpExceptionInterface|InvalidResponseException $e) {
+    ->onExhausted(function (string $key, ResponseInterface $response, ExceptionInterface|InvalidResponseException $e) {
         // called when a single request exhausts all retries
     })
     ->onAbort(function (string $key, ResponseInterface $response, Throwable $e) {
@@ -134,7 +134,7 @@ new RequestConfig('GET', 'https://api.example.com/users',
 )
 ```
 
-Throw `InvalidResponseException` from the parser to reject a semantically invalid 2xx response and trigger a retry on the same machinery (counts against `maxRetries`, fires `onRetry`, and on exhaustion fires `onExhausted` plus rethrows if `throwOnExhausted: true`):
+Throw `InvalidResponseException` from the parser to reject a semantically invalid 2xx response and trigger a retry (counts against `maxRetries`, fires `onRetry`, and on exhaustion fires `onExhausted` plus rethrows if `throwOnExhausted: true`):
 
 ```php
 use Shoxcie\BatchHttpClient\InvalidResponseException;

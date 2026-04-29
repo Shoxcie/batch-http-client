@@ -7,7 +7,7 @@ namespace Shoxcie\BatchHttpClient;
 use Closure;
 use InvalidArgumentException;
 use Symfony\Component\HttpClient\HttpClient;
-use Symfony\Contracts\HttpClient\Exception\HttpExceptionInterface;
+use Symfony\Contracts\HttpClient\Exception\ExceptionInterface;
 use Symfony\Contracts\HttpClient\Exception\TransportExceptionInterface;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
 use Symfony\Contracts\HttpClient\ResponseInterface;
@@ -32,10 +32,10 @@ final class BatchHttpClient
     /** @var null|Closure(string, mixed, ResponseInterface): void */
     private ?Closure $onSuccess = null;
 
-    /** @var null|Closure(string, int, ResponseInterface, TransportExceptionInterface|HttpExceptionInterface|InvalidResponseException, ResponseInterface): void */
+    /** @var null|Closure(string, int, ResponseInterface, ExceptionInterface|InvalidResponseException, ResponseInterface): void */
     private ?Closure $onRetry = null;
 
-    /** @var null|Closure(string, ResponseInterface, TransportExceptionInterface|HttpExceptionInterface|InvalidResponseException): void */
+    /** @var null|Closure(string, ResponseInterface, ExceptionInterface|InvalidResponseException): void */
     private ?Closure $onExhausted = null;
 
     /** @var null|Closure(string, ResponseInterface, Throwable): void */
@@ -85,7 +85,7 @@ final class BatchHttpClient
         return $this;
     }
 
-    /** @param Closure(string, int, ResponseInterface, TransportExceptionInterface|HttpExceptionInterface|InvalidResponseException, ResponseInterface): void $closure */
+    /** @param Closure(string, int, ResponseInterface, ExceptionInterface|InvalidResponseException, ResponseInterface): void $closure */
     public function onRetry(Closure $closure): static
     {
         $this->onRetry = $closure;
@@ -93,7 +93,7 @@ final class BatchHttpClient
         return $this;
     }
 
-    /** @param Closure(string, ResponseInterface, TransportExceptionInterface|HttpExceptionInterface|InvalidResponseException): void $closure */
+    /** @param Closure(string, ResponseInterface, ExceptionInterface|InvalidResponseException): void $closure */
     public function onExhausted(Closure $closure): static
     {
         $this->onExhausted = $closure;
@@ -113,7 +113,7 @@ final class BatchHttpClient
      * @return array<string, mixed>
      *
      * @throws InvalidArgumentException if `retryOptions` contains the reserved `user_data` key
-     * @throws TransportExceptionInterface|HttpExceptionInterface|InvalidResponseException if a `throwOnExhausted` request fails after exhausting retries
+     * @throws ExceptionInterface|InvalidResponseException if a `throwOnExhausted` request fails after exhausting retries
      */
     public function fetch(): array
     {
@@ -146,7 +146,7 @@ final class BatchHttpClient
                             unset($this->responses[$key]);
                         }
 
-                    } catch (TransportExceptionInterface | HttpExceptionInterface | InvalidResponseException $e) {
+                    } catch (ExceptionInterface | InvalidResponseException $e) {
                         if ($this->handleRetryableException($response, $e)) {
                             break;
                         }
@@ -154,7 +154,7 @@ final class BatchHttpClient
                 }
             }
 
-        } catch (TransportExceptionInterface | HttpExceptionInterface | InvalidResponseException $e) {
+        } catch (ExceptionInterface | InvalidResponseException $e) {
             $this->cancelAll();
 
             throw $e;
@@ -174,7 +174,7 @@ final class BatchHttpClient
         return $this->results;
     }
 
-    private function handleRetryableException(ResponseInterface $response, TransportExceptionInterface | HttpExceptionInterface | InvalidResponseException $e): bool
+    private function handleRetryableException(ResponseInterface $response, ExceptionInterface | InvalidResponseException $e): bool
     {
         $isTransportException = $e instanceof TransportExceptionInterface;
 
@@ -222,7 +222,7 @@ final class BatchHttpClient
     /**
      * @throws InvalidArgumentException if `$config->retryOptions` contains the reserved `user_data` key
      */
-    private function retry(string $key, RequestConfig $config, TransportExceptionInterface | HttpExceptionInterface | InvalidResponseException $e): ResponseInterface
+    private function retry(string $key, RequestConfig $config, ExceptionInterface | InvalidResponseException $e): ResponseInterface
     {
         ++$this->retriesCount[$key];
 

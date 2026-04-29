@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `BatchHttpClient::onSuccess()` callback signature is now `Closure(string $key, mixed $result, ResponseInterface $response): void` (previously `Closure(string $key, ResponseInterface $response): void`). The `$result` is the value stored in `$results[$key]` — i.e. post-`parseResponse` if one is configured. Not contravariant: existing closures must add the `$result` parameter.
 - `RequestConfig::$throwOnError` renamed to `RequestConfig::$throwOnExhausted`. The previous name suggested "throw on any error" but the property only governs the post-retry-exhausted path; the new name aligns with the existing `onExhausted` callback. No behavior change.
+- The retry catch now covers `Symfony\Contracts\HttpClient\Exception\ExceptionInterface | InvalidResponseException` (previously `TransportExceptionInterface | HttpExceptionInterface | InvalidResponseException`). Decoding errors (notably malformed JSON via `decodeJson: true`) and redirection-without-follow errors are now retried instead of routed to `onAbort`. `onRetry()` and `onExhausted()` callback signatures widen to match. **Behavior change**: a 200 OK with malformed JSON now retries up to `maxRetries` and exhausts to `onExhausted` (or rethrows `JsonException` per `throwOnExhausted`), rather than firing `onAbort` and cancelling the batch.
 
 See [upgrade/4.0.md](upgrade/4.0.md) for migration details.
 

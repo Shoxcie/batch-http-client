@@ -21,8 +21,8 @@ $results = $client
         'orders' => new RequestConfig('POST', 'https://api.example.com/orders', options: ['json' => $data]),
     ])
     ->onSuccess(function (string $key, mixed $result, ResponseInterface $response) { ... })
-    ->onRetry(function (string $key, int $attempt, ResponseInterface $failedResponse, TransportExceptionInterface|HttpExceptionInterface|InvalidResponseException $e, ResponseInterface $retryResponse) { ... })
-    ->onExhausted(function (string $key, ResponseInterface $response, TransportExceptionInterface|HttpExceptionInterface|InvalidResponseException $e) { ... })
+    ->onRetry(function (string $key, int $attempt, ResponseInterface $failedResponse, ExceptionInterface|InvalidResponseException $e, ResponseInterface $retryResponse) { ... })
+    ->onExhausted(function (string $key, ResponseInterface $response, ExceptionInterface|InvalidResponseException $e) { ... })
     ->onAbort(function (string $key, ResponseInterface $response, Throwable $e) { ... })
     ->fetch();
 ```
@@ -51,22 +51,23 @@ Fires all HTTP requests immediately (Symfony HttpClient is async by default). St
 - Uses `stream()` with `isFirst` / `isLast` chunk pattern (Symfony docs recommended approach)
 - `isFirst`: acknowledges status code via `$response->getStatusCode()` to prevent generator auto-throw
 - `isLast`: reads response body, runs `parseResponse` if configured, stores result
-- Non-2xx, transport errors, and `InvalidResponseException` from `parseResponse` caught via `catch (TransportExceptionInterface | HttpExceptionInterface | InvalidResponseException)`
+- Inner `catch (ExceptionInterface | InvalidResponseException)` covers any Symfony HttpClient exception (non-2xx, transport, decoding/JSON, redirection) and `InvalidResponseException` from `parseResponse`; routes them to `handleRetryableException()` for retry-or-exhaust
 - Outer `try/catch (Throwable)` as safety net — cancels all, calls `onAbort`, rethrows
 - Breaks out of `stream()` foreach only when a retry is scheduled (to restart stream with updated pool)
 
 ### Callbacks
 
 - `onSuccess(Closure)` — called for each 2xx response after `parseResponse` (if any) returns: `(string $key, mixed $result, ResponseInterface $response)`. `$result` is the value stored in `$results[$key]` (post-`parseResponse` if configured).
-- `onRetry(Closure)` — called when a retry fires: `(string $key, int $attempt, ResponseInterface $failedResponse, TransportExceptionInterface|HttpExceptionInterface|InvalidResponseException $e, ResponseInterface $retryResponse)`
-- `onExhausted(Closure)` — called when a single request exhausts all retries: `(string $key, ResponseInterface $response, TransportExceptionInterface|HttpExceptionInterface|InvalidResponseException $e)`
-- `onAbort(Closure)` — called when an unexpected exception cancels the whole batch (broken JSON, throwing user callback, parser throwing something other than `InvalidResponseException`, etc.): `(string $key, ResponseInterface $response, Throwable $e)`. Skipped if the throw happened before any response was processed.
+- `onRetry(Closure)` — called when a retry fires: `(string $key, int $attempt, ResponseInterface $failedResponse, ExceptionInterface|InvalidResponseException $e, ResponseInterface $retryResponse)`
+- `onExhausted(Closure)` — called when a single request exhausts all retries: `(string $key, ResponseInterface $response, ExceptionInterface|InvalidResponseException $e)`
+- `onAbort(Closure)` — called when an unexpected `Throwable` (not an `ExceptionInterface` or `InvalidResponseException`) cancels the whole batch — e.g. a `RuntimeException` from a user callback, or anything other than `InvalidResponseException` thrown from `parseResponse`: `(string $key, ResponseInterface $response, Throwable $e)`. Skipped if the throw happened before any response was processed.
 
 ### Retry behavior
 
 - Any non-2xx HTTP status triggers a retry (Symfony throws `HttpExceptionInterface` which is caught)
 - Transport exceptions (connection timeout, DNS failure) retry based on `retryOnTransportException` per request (configurable, default true)
-- A `parseResponse` closure throwing `InvalidResponseException` triggers a retry on the same machinery (counts against `maxRetries`, fires `onRetry`/`onExhausted`)
+- Decoding errors (malformed JSON via `decodeJson: true`, any `DecodingExceptionInterface`) trigger a retry
+- A `parseResponse` closure throwing `InvalidResponseException` triggers a retry (counts against `maxRetries`, fires `onRetry`/`onExhausted`)
 - Retries fire immediately (no backoff delay)
 - Retry requests use `array_replace_recursive($options, $retryOptions)` for options
 - `retryOptions` can be a Closure receiving `(int $attempt, Throwable $e)` for dynamic retry configuration

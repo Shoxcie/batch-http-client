@@ -10,9 +10,8 @@ use Symfony\Component\HttpClient\Exception\TransportException;
 use Symfony\Component\HttpClient\MockHttpClient;
 use Symfony\Component\HttpClient\Response\JsonMockResponse;
 use Symfony\Component\HttpClient\Response\MockResponse;
+use Symfony\Contracts\HttpClient\Exception\DecodingExceptionInterface;
 use Symfony\Contracts\HttpClient\Exception\ExceptionInterface;
-use Symfony\Contracts\HttpClient\Exception\HttpExceptionInterface;
-use Symfony\Contracts\HttpClient\Exception\TransportExceptionInterface;
 use Symfony\Contracts\HttpClient\ResponseInterface;
 
 describe('successful batch requests (2xx)', function (): void {
@@ -577,7 +576,7 @@ describe('callbacks', function (): void {
         $thrown = null;
 
         $mockClient = new MockHttpClient([
-            new MockResponse('not json', ['response_headers' => ['content-type' => 'application/json']]),
+            new JsonMockResponse(['ok' => true]),
         ]);
 
         try {
@@ -585,19 +584,22 @@ describe('callbacks', function (): void {
                 ->request([
                     'api' => new RequestConfig('GET', 'https://api.example.com/api'),
                 ])
+                ->onSuccess(function (string $key, mixed $result, ResponseInterface $response): void {
+                    throw new \RuntimeException('boom');
+                })
                 ->onAbort(function (string $key, ResponseInterface $response, \Throwable $e) use (&$captured): void {
                     $captured[] = ['key' => $key, 'response' => $response, 'exception' => $e];
                 })
                 ->fetch();
-        } catch (\JsonException $e) {
+        } catch (\RuntimeException $e) {
             $thrown = $e;
         }
 
-        expect($thrown)->toBeInstanceOf(\JsonException::class)
+        expect($thrown)->toBeInstanceOf(\RuntimeException::class)
             ->and($captured)->toHaveCount(1)
             ->and($captured[0]['key'])->toBe('api')
             ->and($captured[0]['response'])->toBeInstanceOf(ResponseInterface::class)
-            ->and($captured[0]['exception'])->toBeInstanceOf(\JsonException::class);
+            ->and($captured[0]['exception'])->toBeInstanceOf(\RuntimeException::class);
     });
 
 });
@@ -899,20 +901,6 @@ describe('user_data rejection', function (): void {
 });
 
 describe('safety-net catch', function (): void {
-    test('rethrows JsonException on broken JSON with decodeJson true', function (): void {
-        $mockClient = new MockHttpClient([
-            new MockResponse('not json', ['response_headers' => ['content-type' => 'application/json']]),
-        ]);
-
-        expect(
-            fn(): array => new BatchHttpClient($mockClient)
-            ->request([
-                'api' => new RequestConfig('GET', 'https://api.example.com/api'),
-            ])
-            ->fetch(),
-        )->toThrow(\JsonException::class);
-    });
-
     test('rethrows exception thrown from onSuccess callback', function (): void {
         $mockClient = new MockHttpClient([
             new JsonMockResponse(['ok' => true]),
@@ -951,6 +939,91 @@ describe('safety-net catch', function (): void {
         )->toThrow(\RuntimeException::class);
 
         expect($mockClient->getRequestsCount())->toBe(3);
+    });
+});
+
+describe('decoding errors', function (): void {
+    test('rethrows JsonException after exhausting retries (default maxRetries 0)', function (): void {
+        $mockClient = new MockHttpClient([
+            new MockResponse('not json', ['response_headers' => ['content-type' => 'application/json']]),
+        ]);
+
+        expect(
+            fn(): array => new BatchHttpClient($mockClient)
+                ->request([
+                    'api' => new RequestConfig('GET', 'https://api.example.com/api'),
+                ])
+                ->fetch(),
+        )->toThrow(\JsonException::class);
+    });
+
+    test('decoding error triggers retry', function (): void {
+        $callCount = 0;
+
+        $mockClient = new MockHttpClient(
+            function () use (&$callCount): MockResponse {
+                ++$callCount;
+
+                return $callCount === 1
+                    ? new MockResponse('not json', ['response_headers' => ['content-type' => 'application/json']])
+                    : new JsonMockResponse(['ok' => true]);
+            },
+        );
+
+        $retryCalls = [];
+
+        $results = new BatchHttpClient($mockClient)
+            ->request([
+                'api' => new RequestConfig(
+                    'GET',
+                    'https://api.example.com/api',
+                    maxRetries: 1,
+                ),
+            ])
+            ->onRetry(function (string $key, int $attempt, ResponseInterface $failedResponse, ExceptionInterface|InvalidResponseException $e, ResponseInterface $retryResponse) use (&$retryCalls): void {
+                $retryCalls[] = ['key' => $key, 'attempt' => $attempt, 'exception' => $e];
+            })
+            ->fetch();
+
+        expect($mockClient->getRequestsCount())->toBe(2)
+            ->and($results['api'])->toBe(['ok' => true])
+            ->and($retryCalls)->toHaveCount(1)
+            ->and($retryCalls[0]['key'])->toBe('api')
+            ->and($retryCalls[0]['attempt'])->toBe(1)
+            ->and($retryCalls[0]['exception'])->toBeInstanceOf(DecodingExceptionInterface::class);
+    });
+
+    test('exhausting retries on decoding error fires onExhausted and stores null', function (): void {
+        $mockClient = new MockHttpClient(
+            fn(): MockResponse => new MockResponse('not json', ['response_headers' => ['content-type' => 'application/json']]),
+        );
+
+        $exhaustedCalls = [];
+        $abortCalls = [];
+
+        $results = new BatchHttpClient($mockClient)
+            ->request([
+                'api' => new RequestConfig(
+                    'GET',
+                    'https://api.example.com/api',
+                    throwOnExhausted: false,
+                    maxRetries: 2,
+                ),
+            ])
+            ->onExhausted(function (string $key, ResponseInterface $response, ExceptionInterface|InvalidResponseException $e) use (&$exhaustedCalls): void {
+                $exhaustedCalls[] = ['key' => $key, 'exception' => $e];
+            })
+            ->onAbort(function (string $key, ResponseInterface $response, \Throwable $e) use (&$abortCalls): void {
+                $abortCalls[] = ['key' => $key, 'exception' => $e];
+            })
+            ->fetch();
+
+        expect($results['api'])->toBeNull()
+            ->and($mockClient->getRequestsCount())->toBe(3)
+            ->and($exhaustedCalls)->toHaveCount(1)
+            ->and($exhaustedCalls[0]['key'])->toBe('api')
+            ->and($exhaustedCalls[0]['exception'])->toBeInstanceOf(DecodingExceptionInterface::class)
+            ->and($abortCalls)->toBe([]);
     });
 });
 
@@ -1074,7 +1147,7 @@ describe('parseResponse', function (): void {
                     },
                 ),
             ])
-            ->onRetry(function (string $key, int $attempt, ResponseInterface $failedResponse, TransportExceptionInterface|HttpExceptionInterface|InvalidResponseException $e, ResponseInterface $retryResponse) use (&$retryCalls): void {
+            ->onRetry(function (string $key, int $attempt, ResponseInterface $failedResponse, ExceptionInterface|InvalidResponseException $e, ResponseInterface $retryResponse) use (&$retryCalls): void {
                 $retryCalls[] = ['key' => $key, 'attempt' => $attempt, 'exception' => $e];
             })
             ->fetch();
